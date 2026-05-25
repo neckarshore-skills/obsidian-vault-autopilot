@@ -23,6 +23,7 @@ body:
         - inbox-sort
         - note-rename
         - property-enrich
+        - property-describe
         - New skill idea
         - Plugin Core
         - Documentation

@@ -42,6 +42,8 @@ Birthtimes are not reliably preserved on Windows clones even with `/COPY:DAT` (G
 rsync -aAX "$HOME/Vaults/MyVault/" "$HOME/Vaults/MyVault-Clone/"
 ```
 
+Most Linux filesystems (ext4) do not store birthtime — only ctime/mtime/atime. `rsync -aAX` preserves what the filesystem supports, but `created` date coverage will be low on ext4 vaults. `property-enrich` backfills `created` from filename patterns, YAML, and Git history; run it first for the best metadata baseline. XFS and Btrfs do store birthtime and behave like macOS.
+
 For details on why the clone method matters, see [Cloning Guide](cloning-guide.md).
 
 > **If you use Obsidian Sync:** disable it on both the source and the clone before proceeding. See [Cloning Guide — Obsidian Sync Must Be Off](cloning-guide.md#obsidian-sync-must-be-off).

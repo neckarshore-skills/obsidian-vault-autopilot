@@ -31,6 +31,7 @@ body:
         - inbox-sort
         - note-rename
         - property-enrich
+        - property-describe
         - Plugin Core
         - Documentation
         - Other
