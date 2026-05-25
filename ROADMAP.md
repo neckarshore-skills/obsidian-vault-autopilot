@@ -43,7 +43,7 @@ Six skills that automate Obsidian vault management:
 
 | # | Skill | What it does | Status |
 |---|-------|-------------|--------|
-| 1 | inbox-sort | Moves notes from inbox to correct subfolders based on content | beta |
+| 1 | inbox-sort | Moves notes from inbox to correct subfolders based on content | stable |
 | 2 | note-rename | Renames poorly named files, updates all backlinks | stable |
 | 3 | note-quality-check | Scores notes by quality, recommends what to keep or delete | beta |
 | 4 | property-describe | Generates concise description frontmatter from note content | beta |

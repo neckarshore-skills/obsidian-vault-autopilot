@@ -6,7 +6,7 @@
 
 **Organization:** Neckarshore AI
 **License:** MIT
-**Status:** Pre-launch (v0.1.5)
+**Status:** Public (v0.1.5)
 
 ## Plugin Structure
 
@@ -26,7 +26,7 @@ logs/
 
 ## Skills (4 launch-scope + 2 in-development + 1 deferred)
 
-Launch-scope = Cycle-4 Gold-Run validated (see [D19](https://github.com/omnopsis-ai/omnopsis-planning/blob/main/docs/reference/decisions-strategy.md#d19--ova-cycle-4-pass-criterion-reformulation-0-new-class-a-skill-regressions)). In-development beta skills live in the codebase but were not part of the launch-scope test matrix.
+Launch-scope = Cycle-4 Gold-Run validated (see D19 in the internal decisions ledger). In-development beta skills live in the codebase but were not part of the launch-scope test matrix.
 
 | # | Skill | Core Task | Status |
 |---|-------|-----------|--------|

@@ -46,6 +46,7 @@ body:
         - inbox-sort
         - note-rename
         - property-enrich
+        - property-describe
         - Plugin Core
         - Other / Not sure
     validations:
