@@ -1,0 +1,43 @@
+name: test
+
+# Runs every assertion suite under scripts/test-*.sh on push and PR.
+# Phase 1 of docs/plans/2026-06-11-skill-hardening-fable-pilot.md — before
+# this workflow existed, the suites ran only when someone remembered to.
+#
+# Runner is macos-latest deliberately: the suites were authored against the
+# BSD toolchain (test-clone-cluster.sh reads birthtime via `stat -f '%B'`,
+# the fixture generator sets it via `touch -t` — both macOS semantics).
+# macOS runners are free for public repos. Linux-portability of the suites
+# is tracked as backlog, not assumed.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  assertion-suites:
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run all assertion suites
+        run: |
+          set -u
+          overall=0
+          for t in scripts/test-*.sh; do
+            echo "::group::${t}"
+            if bash "$t"; then
+              echo "RESULT: PASS ${t}"
+            else
+              echo "RESULT: FAIL ${t}"
+              overall=1
+            fi
+            echo "::endgroup::"
+          done
+          exit "$overall"
+
+      - name: Verify fixture encoding invariants survived checkout
+        run: |
+          file tests/fixtures/yaml-sanity-verdicts/notes/cell-17-bom-frontmatter.md | grep BOM
+          file tests/fixtures/yaml-sanity-verdicts/notes/cell-18-crlf-frontmatter.md | grep CRLF

@@ -105,18 +105,17 @@ export OBSIDIAN_VAULT_PATH="/path/to/your/vault"
 
 No hardcoded paths. No assumptions about vault location. One variable, one truth.
 
-## Target Skills (8)
+## Target Skills (7)
 
 | # | Skill | Core Task | Nahbereich | Report |
 |---|-------|-----------|------------|--------|
-| 1 | inbox-sort | Move files from inbox to correct folders | Delete empty files | List of moves + findings |
-| 2 | note-rename | Rename poorly named files | Flag duplicates | Renamed files + suspicious patterns |
-| 3 | note-quality-check | Score notes, suggest deletions | Delete confirmed empty | Quality scores + deletion list |
-| 4 | properties | Standardize YAML frontmatter | Fix obvious errors (missing date) | Updated vs. skipped vs. broken |
-| 5 | tags | Assign and clean up tags | Remove orphan tags | Tag changes + tag health |
-| 6 | social-scraper | Import external content into vault | Normalize format | Imported items + source list |
-| 7 | research-report | Generate research summary from URLs | n/a | Report document |
-| 8 | social-post | Draft social post from vault note | n/a | Post draft + suggestions |
+| 1 | inbox-sort | Move files from inbox to correct folders | Delete confirmed-empty files, fill missing `created` | List of moves + findings |
+| 2 | note-quality-check | Score notes, walk user through decisions | Trash whitespace-only files (soft-delete) | Quality distribution + actions + parked items |
+| 3 | note-rename | Rename poorly named files, fix backlinks | Trash accidental notes, minimal YAML syntax repairs | Renamed files + suspicious patterns |
+| 4 | property-classify | Set `status` and `type` from rules | Normalize property-key casing | Classifications + conflicts + distribution |
+| 5 | property-describe | Generate `description` from content | Write `description: TBD` for too-thin notes | Written vs. skipped vs. flagged |
+| 6 | property-enrich | Fill missing `title`/`created`/`modified` | Create frontmatter if none exists | Fields added + source per note |
+| 7 | tag-manage | Audit tags + suggest from content (v0.2.0, deferred) | Auto-fix obvious convention violations | Tag health + changes + suggestions |
 
-Plus: a future **config/onboarding skill** that analyzes a vault and proposes configuration.
+Plus: a future **config/onboarding skill** that analyzes a vault and proposes configuration. Former target skills social-scraper, research-report, and social-post moved out of this plugin into the standalone scraper-skill family (D17).
 

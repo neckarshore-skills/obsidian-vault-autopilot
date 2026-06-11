@@ -18,11 +18,12 @@ Step zero of any property-write workflow:
 
 ## Procedure
 
-1. Read frontmatter lines per `references/yaml-edits.md` recipe (a).
-2. If no frontmatter exists: return verdict `OK_NO_FRONTMATTER`.
-3. Walk frontmatter lines. Match each line against detection patterns (§ "Detection patterns" below). Collect findings.
-4. Walk the entire file (not just frontmatter) for multi-block / unclosed-block detection.
-5. Return verdict + finding list.
+1. Read frontmatter lines per `references/yaml-edits.md` recipe (a). Strip a UTF-8 BOM (U+FEFF, bytes `EF BB BF`) from line 0 before the `---` comparison — a BOM is invisible in most editors and must not make real frontmatter look absent (see recipe (a) BOM note).
+2. Structural checks (Pattern 3) run before the no-frontmatter early-return: if line 0 (after BOM-strip) is `---` but no closing `---` exists, return `UNCLOSED_FRONTMATTER` immediately. Recipe (a) reports such a file as "no frontmatter" — that is a read-result, not a verdict. An unclosed block is Class-A, not absent: early-returning `OK_NO_FRONTMATTER` here would let recipe (c) prepend a second block and corrupt the file further.
+3. If no frontmatter exists (line 0 after BOM-strip is not `---`): return verdict `OK_NO_FRONTMATTER`.
+4. Walk frontmatter lines. Match each line against detection patterns (§ "Detection patterns" below). Collect findings.
+5. Walk the entire file (not just frontmatter) for multi-block detection.
+6. Return verdict + finding list.
 
 ## Verdicts
 

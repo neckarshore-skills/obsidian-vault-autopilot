@@ -48,13 +48,18 @@ Per-line regex is fine. Multi-line regex is not.
 
 ```text
 1. Read file → lines.
-2. If lines[0].rstrip() != '---': no frontmatter exists. Return None.
-3. Walk i from 1; the first i where lines[i].rstrip() == '---' is the close.
-4. frontmatter = lines[1:close_index]    # the slice between the two ---
-5. body = lines[close_index+1:]
+2. Strip a UTF-8 BOM (U+FEFF, bytes EF BB BF) from lines[0] before any
+   comparison. Preserve the BOM on write-back — recipe (a) reads, it does
+   not re-encode.
+3. If lines[0].rstrip() != '---': no frontmatter exists. Return None.
+4. Walk i from 1; the first i where lines[i].rstrip() == '---' is the close.
+5. frontmatter = lines[1:close_index]    # the slice between the two ---
+6. body = lines[close_index+1:]
 ```
 
 If the file has fewer than two `---` lines, treat the file as having no frontmatter. Never invent a frontmatter block from a single `---`.
+
+> **Note:** "Return None" is a read-result, not a health verdict. A file whose line 0 (after BOM-strip) is `---` with no closing `---` is classified `UNCLOSED_FRONTMATTER` (Class-A) by `references/yaml-sanity.md` Pattern 3 — the sanity-check runs its structural checks before treating the file as frontmatter-free.
 
 ## Recipe (b) — Replace a single field value
 

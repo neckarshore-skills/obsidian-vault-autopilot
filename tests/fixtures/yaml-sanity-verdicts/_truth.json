@@ -1,0 +1,37 @@
+{
+  "fixture": "yaml-sanity-verdicts",
+  "spec": "references/yaml-sanity.md",
+  "purpose": "Truth matrix for the yaml-sanity verdict classifier. Each cell maps a file shape to the verdict the classifier MUST return per the spec. Wired into scripts/test-yaml-sanity-verdicts.sh.",
+  "cells": {
+    "cell-01-ok-plain": "OK",
+    "cell-02-ok-quoted-alpha": "OK_QUOTED",
+    "cell-03-no-frontmatter": "OK_NO_FRONTMATTER",
+    "cell-04-broken-inside-colon": "BROKEN_KEYS_INSIDE_COLON",
+    "cell-05-mixed-alpha-beta": "BROKEN_KEYS_INSIDE_COLON",
+    "cell-06-divergent-plain": "DUPLICATE_KEYS_DIVERGENT_VALUES",
+    "cell-07-identical-plain": "DUPLICATE_KEYS_IDENTICAL_VALUES",
+    "cell-08-identical-after-comment-strip": "DUPLICATE_KEYS_IDENTICAL_VALUES",
+    "cell-09-empty-vs-nonempty-dup": "DUPLICATE_KEYS_DIVERGENT_VALUES",
+    "cell-10-multi-frontmatter-blocks": "MULTIPLE_FRONTMATTER_BLOCKS",
+    "cell-11-body-horizontal-rules": "OK",
+    "cell-12-yaml-in-code-fence": "OK",
+    "cell-13-unclosed-frontmatter": "UNCLOSED_FRONTMATTER",
+    "cell-14-beta-divergent-collision": "DUPLICATE_KEYS_DIVERGENT_VALUES",
+    "cell-15-beta-identical-collision": "BROKEN_KEYS_INSIDE_COLON",
+    "cell-16-prose-colon-between-body-rules": "MULTIPLE_FRONTMATTER_BLOCKS",
+    "cell-17-bom-frontmatter": "OK",
+    "cell-18-crlf-frontmatter": "OK"
+  },
+  "repros": {
+    "test-data/f2-repro.md": "OK",
+    "test-data/f19-repro.md": "BROKEN_KEYS_INSIDE_COLON",
+    "test-data/f25-repro.md": "OK_QUOTED",
+    "test-data/f26-repro.md": "DUPLICATE_KEYS_DIVERGENT_VALUES",
+    "test-data/f26-mixed-shapes-repro.md": "BROKEN_KEYS_INSIDE_COLON"
+  },
+  "notes": {
+    "cell-16-prose-colon-between-body-rules": "Conservative by design: Pattern 2 flags prose 'Word: text' lines between body rules as YAML-key-like. False-positive SKIP (Class-A finding), never a wrong write. Pinned so future heuristic changes are explicit truth-matrix changes.",
+    "test-data/f26-repro.md": "Truth follows the v0.1.4 W4 priority ladder: the divergent created-collision (2024-03-14 vs 2025-01-01) dominates the beta shape.",
+    "INVALID_YAML": "No deterministic cell — the verdict covers the residual 'patterns OK but parser fails' class, which has no canonical byte-shape. Documented limitation."
+  }
+}
