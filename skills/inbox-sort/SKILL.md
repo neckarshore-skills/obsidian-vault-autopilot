@@ -105,8 +105,8 @@ After every run, append one row to `logs/run-history.md` and update `logs/change
 
 Before reporting done:
 - [ ] Every moved file still exists at its new path
-- [ ] No files were renamed or modified
-- [ ] Cooldown was respected (no recently modified files moved)
+- [ ] No files were renamed and no note body content was rewritten — only moves plus minimal frontmatter Nahbereich (YAML sanity recipes b + f in Step 5a, skill-log callout/tag in Step 12)
+- [ ] Cooldown was respected (no recently created files moved — cooldown reads the YAML `created` date via the Source Hierarchy, never modification date)
 - [ ] Nahbereich actions were logged individually (0-byte deletes and whitespace-only trashes)
 - [ ] Non-markdown files moved to `_Attachments/`
 - [ ] Report covers all processed and skipped notes

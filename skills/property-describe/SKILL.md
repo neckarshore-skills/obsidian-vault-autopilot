@@ -18,7 +18,7 @@ Generate a concise `description` property for vault notes by reading their conte
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `cooldown_days` | 3 | Skip notes created within the last N days. Use file creation date (birthtime). |
+| `cooldown_days` | 3 | Skip notes created within the last N days. Grace period so the user can review recent captures before automation touches them. **Date source:** YAML `created` field in frontmatter. If missing, evaluate via the Source Hierarchy (filename date > Git first-commit > filesystem birthtime), gated by the clone-cluster check (Step 2c) so clone-time birthtime never counts as a real creation date — read-only for cooldown purposes; describe does not write `created` (that is property-enrich's job). Never use modification date. |
 | `scope` | inbox | Which folder to scan. `inbox` = inbox root only (default). `inbox-tree` = inbox folder including all subfolders (opt-in for bulk-mode, e.g. initial vault setup). `vault` = entire vault excluding root. `folder:<path>` = specific subfolder. User confirms before execution. |
 | `clone_cluster_skip` | true | When `true` (default), Step 2c DEFERs description generation for files whose only available date source is filesystem birthtime AND whose birthtime falls in a detected clone-cluster window (cooldown undecidable). See `references/clone-cluster-detection.md`. Set to `false` to fall through to filesystem birthtime for cooldown evaluation. |
 
