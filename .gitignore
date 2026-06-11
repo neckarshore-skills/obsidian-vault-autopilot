@@ -42,3 +42,7 @@ session-report-*.html
 
 # Clone-cluster fixture generated notes (regenerate via tests/fixtures/clone-cluster/generate.sh)
 tests/fixtures/clone-cluster/notes/
+
+# Fixture cells are test material, never drafts — exempt from the draft-file
+# patterns above (a *-draft.md fixture was silently excluded on 2026-06-11).
+!tests/fixtures/**/*.md
