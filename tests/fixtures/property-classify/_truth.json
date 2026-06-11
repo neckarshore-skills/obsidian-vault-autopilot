@@ -1,0 +1,36 @@
+{
+  "fixture": "property-classify",
+  "spec": "skills/property-classify/SKILL.md",
+  "purpose": "Truth matrix for property-classify's deterministic rules: status hierarchy (protected > archived > reviewed > polished > draft), two-layer type classification (content signals over path), conflict handling, casing Nahbereich, and yaml-sanity skip routing. Wired into scripts/test-property-classify.sh.",
+  "cells": {
+    "099_Archive/s03-archived-by-path": {"status": "archived", "type": "archive", "action": "set"},
+    "099_Archive/s09-priority-archived-over-reviewed": {"status": "archived", "type": "archive", "action": "set"},
+    "inbox/s01-protected-permanent": {"status": "permanent", "type": "-", "action": "protected"},
+    "inbox/s02-protected-evergreen": {"status": "evergreen", "type": "-", "action": "protected"},
+    "inbox/s04-reviewed-checkboxes": {"status": "reviewed", "type": "inbox", "action": "set"},
+    "inbox/s05-not-reviewed-mixed-checkboxes": {"status": "draft", "type": "inbox", "action": "set"},
+    "inbox/s06-polished": {"status": "polished", "type": "inbox", "action": "set"},
+    "inbox/s07-polished-blocked-by-placeholder": {"status": "draft", "type": "inbox", "action": "set"},
+    "inbox/s08-default-draft": {"status": "draft", "type": "inbox", "action": "set"},
+    "inbox/s10-casing-nahbereich": {"status": "draft", "type": "inbox", "action": "normalize-casing"},
+    "inbox/t02-meeting-agenda": {"status": "draft", "type": "meeting", "action": "set"},
+    "inbox/t03-type-by-path-inbox": {"status": "draft", "type": "inbox", "action": "set"},
+    "inbox/x01-f26-broken-keys": {"status": "-", "type": "-", "action": "skip-sanity"},
+    "inbox/x02-divergent-dup": {"status": "-", "type": "-", "action": "skip-sanity"},
+    "notes/t06-no-match-tbd": {"status": "draft", "type": "TBD", "action": "set"},
+    "people/t05-person": {"status": "draft", "type": "person", "action": "set"},
+    "projects/t04-type-by-path-project": {"status": "draft", "type": "project", "action": "set"},
+    "projects/t07-conflict-existing-type": {"status": "draft", "type": "resource", "action": "conflict"},
+    "projects/t08-overwrite-tbd": {"status": "draft", "type": "project", "action": "set"},
+    "projects/t09-overwrite-inbox-type": {"status": "draft", "type": "project", "action": "set"},
+    "resources/t01-book-isbn": {"status": "draft", "type": "book", "action": "set"},
+    "templates/t10-template": {"status": "draft", "type": "template", "action": "set"}
+  },
+  "notes": {
+    "099_Archive": "Status 'archived' uses the same matching semantics as the Layer-2 type rule: any folder-path segment containing 'archive', case-insensitive. The pre-hardening SKILL.md literal '/archive/' (with slashes) missed the vault's own 099_Archive/ convention.",
+    "action:conflict": "Existing type (not TBD/inbox) differs from proposal: flag, never overwrite. The truth 'type' column shows the value that stays on disk.",
+    "action:protected": "permanent/evergreen notes are skipped entirely; '-' = untouched.",
+    "action:skip-sanity": "yaml-sanity verdict routing (additive-only policy): broken keys and duplicate-key collisions are SKIPPED + finding, never repaired by classify, never written through.",
+    "path-semantics": "Layer-2 'path contains' means the folder path relative to the vault root, EXCLUDING the filename — a note named 'Meeting with Bob.md' in notes/ must not become type meeting via its own filename."
+  }
+}

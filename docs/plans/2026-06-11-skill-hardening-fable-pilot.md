@@ -1,6 +1,6 @@
 # Skill-Cluster Hardening Plan — Fable Pilot (2026-06-11)
 
-**Status:** Phase 1 in progress — "go" received 2026-06-11 with two adjustments: (1) the property-classify cooldown/birthtime contradiction is a safety-gate bypass and is handled in Phase 2 (not Phase 4), (2) the Phase-1 stop must name the 2 beta skills and their disposition. Cosmetic items #1/#2 resolved en passant, #3 deferred (user decision).
+**Status:** Phase 1 merged (PR #34, 2026-06-11) — yaml-sanity verdict eval suite (61 assertions) + CI; 3 spec gaps closed RED→GREEN. Phase 2 in-review — property-classify rule eval suite (65 assertions) + full hardening stack; 13 RED assertions closed, incl. the cooldown/birthtime safety-gate bypass (user adjustment: pulled into Phase 2) plus two newly discovered rule gaps (archive-rule slash-literal vs 099_Archive/, Layer-2 filename-in-path ambiguity). Cosmetic items #1/#2 resolved en passant, #3 deferred (user decision). Next stop-gate: Phase 3 note-quality-check.
 **Scope:** The 7 skills under `skills/` only. No new skills, no behavior regressions (AP-1: changes additive or explicitly flagged).
 **Method:** Eval/test-first per phase — failing assertion committed RED first, then the fix turns it GREEN. Hard stop after every phase.
 
