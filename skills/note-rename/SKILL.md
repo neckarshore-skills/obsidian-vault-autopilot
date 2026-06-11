@@ -18,6 +18,7 @@ Give poorly named vault notes clear, descriptive filenames. Rename and fix backl
   - Remove junk text before opening `---` (e.g. dictation artifacts like `Thx ---` → `---`)
   - Fix quoted keys with embedded colon: `"type:"` → `type` (the colon belongs to YAML syntax, not the key name)
   - Fill missing YAML `created` from the Source Hierarchy (filename date > Git first-commit > filesystem birthtime) before evaluating cooldown. See `docs/metadata-requirements.md`. This prevents birthtime corruption on subsequent skill runs.
+  - **Execution precedence:** the quoted-key and duplicate-`---` repairs above are governed by Step 4a's sanity-check routing — apply them via `references/yaml-edits.md` recipe (f), which resolves duplicate-key collisions (identical → silent dedup; divergent → ABORT: skip + Class-A finding, no rename). Never hand-apply a key fix in a way that bypasses the recipe (f) Step 3 collision check.
 - **Report:** Renames, backlink updates, findings for other skills
 
 ## Parameters
