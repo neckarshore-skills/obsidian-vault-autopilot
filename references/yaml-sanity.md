@@ -14,7 +14,7 @@ Step zero of any property-write workflow:
 - `property-describe` Step 2a (before Filter — eligibility check) AND pre-Write (Step 5)
 - `note-rename` Step 4a (before Classify cooldown logic)
 - `inbox-sort` Step 5a (before Cooldown evaluation)
-- `property-classify` (v0.2.0+) Step 2 (before Type/Status detection)
+- `property-classify` Step 2a (before Type/Status detection) AND pre-Write (Step 5)
 
 ## Procedure
 
@@ -172,7 +172,7 @@ title: F7 case
 | `note-rename` | use existing Corrupted File Detection (rename file with corruption-label) | skip + Class-A finding "duplicate-key-divergent-values" (route to user; do NOT rename — file may legitimately need user merge first) | repair via Step 4a recipe (f) (broadened from existing hardcoded-list) | repair via Step 4a recipe (f) silent dedup | proceed; skill regex matches both shapes | proceed |
 | `inbox-sort` | skip + Class-A finding (route to note-rename) | skip + Class-A finding "duplicate-key-divergent-values" (route to user / note-rename) | repair via Step 5a recipe (f) (broadened from existing hardcoded-list) | repair via Step 5a recipe (f) silent dedup | proceed; skill regex matches both shapes | proceed |
 | `property-describe` | skip + Class-A finding | skip + Class-A finding "duplicate-key-divergent-values" (route to user / property-enrich for resolution) | SKIP + Class-C finding "broken-yaml: inside-colon shape detected — run property-enrich first" (NOT repair — boundaries: describe is additive-only) | SKIP + Class-C finding "duplicate-keys-identical: run property-enrich first to dedup" (additive-only — defer to repair-capable skill) | proceed; broadened filter regex catches both plain and standard-quoted forms | proceed |
-| `property-classify` (v0.2.0) | skip + finding | skip + finding | skip + finding | skip + finding | proceed; broadened regex | proceed |
+| `property-classify` | skip + Class-A finding (route to note-rename) | skip + Class-A finding "duplicate-key-divergent-values" (route to user / note-rename) | SKIP + Class-C finding "broken-yaml: run property-enrich first" (NOT repair — classify is additive-only on YAML health) | SKIP + Class-C finding "duplicate-keys-identical: run property-enrich first to dedup" | proceed; broadened regex | proceed |
 
 Defense-in-depth lives in the **sanity-check call itself**: skills that already have repair logic in their workflow (enrich, rename, sort) are calling sanity-check as a Step-zero pre-flight. If sanity-check returns Class-A, skill skips. If Class-C (`BROKEN_KEYS_INSIDE_COLON`), skill calls its own repair step. If both succeed, skill proceeds normally.
 
