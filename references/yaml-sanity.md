@@ -15,6 +15,7 @@ Step zero of any property-write workflow:
 - `note-rename` Step 4a (before Classify cooldown logic)
 - `inbox-sort` Step 5a (before Cooldown evaluation)
 - `property-classify` Step 2a (before Type/Status detection) AND pre-Write (Step 5)
+- `note-quality-check` Phase 1 Step 3 (before any frontmatter read feeds the quality scoring)
 
 ## Procedure
 
@@ -173,6 +174,7 @@ title: F7 case
 | `inbox-sort` | skip + Class-A finding (route to note-rename) | skip + Class-A finding "duplicate-key-divergent-values" (route to user / note-rename) | repair via Step 5a recipe (f) (broadened from existing hardcoded-list) | repair via Step 5a recipe (f) silent dedup | proceed; skill regex matches both shapes | proceed |
 | `property-describe` | skip + Class-A finding | skip + Class-A finding "duplicate-key-divergent-values" (route to user / property-enrich for resolution) | SKIP + Class-C finding "broken-yaml: inside-colon shape detected — run property-enrich first" (NOT repair — boundaries: describe is additive-only) | SKIP + Class-C finding "duplicate-keys-identical: run property-enrich first to dedup" (additive-only — defer to repair-capable skill) | proceed; broadened filter regex catches both plain and standard-quoted forms | proceed |
 | `property-classify` | skip + Class-A finding (route to note-rename) | skip + Class-A finding "duplicate-key-divergent-values" (route to user / note-rename) | SKIP + Class-C finding "broken-yaml: run property-enrich first" (NOT repair — classify is additive-only on YAML health) | SKIP + Class-C finding "duplicate-keys-identical: run property-enrich first to dedup" | proceed; broadened regex | proceed |
+| `note-quality-check` | exclude from scoring + Class-A finding (route to note-rename) | exclude from scoring + Class-A finding "duplicate-key-divergent-values" (route to user / note-rename) | exclude from scoring + Class-C finding "broken-yaml: run property-enrich first" (NOT repair; a corrupted file is a repair case, not a low-quality note) | exclude from scoring + Class-C finding (defer to property-enrich) | proceed; broadened regex | proceed |
 
 Defense-in-depth lives in the **sanity-check call itself**: skills that already have repair logic in their workflow (enrich, rename, sort) are calling sanity-check as a Step-zero pre-flight. If sanity-check returns Class-A, skill skips. If Class-C (`BROKEN_KEYS_INSIDE_COLON`), skill calls its own repair step. If both succeed, skill proceeds normally.
 
