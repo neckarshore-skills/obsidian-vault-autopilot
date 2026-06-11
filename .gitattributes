@@ -1,0 +1,3 @@
+# Byte-exact fixtures: cell-17 carries a UTF-8 BOM, cell-18 carries CRLF
+# endings. No EOL conversion on checkout/commit, ever.
+tests/fixtures/yaml-sanity-verdicts/notes/* -text
