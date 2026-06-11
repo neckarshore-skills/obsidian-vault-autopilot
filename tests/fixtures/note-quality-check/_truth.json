@@ -1,0 +1,31 @@
+{
+  "fixture": "note-quality-check",
+  "spec": "skills/note-quality-check/SKILL.md",
+  "purpose": "Truth matrix for note-quality-check's deterministic core: Nahbereich candidacy (0-byte / whitespace-only ONLY), the five intentional-content signals as survival guards, yaml-sanity exclusion routing, and protected files/folders. Wired into scripts/test-note-quality-check.sh.",
+  "dispositions": {
+    "delete-candidate": "Eligible for permanent delete (0 bytes) — ONLY after the preview/user gate. Never executed pre-preview.",
+    "exclude-sanity": "Broken YAML (shape-beta, duplicate keys, multi-block, unclosed) — excluded from scoring + finding. A corrupted file is a repair case, not a low-quality note.",
+    "protected": "Never processed or scored (_vault-autopilot.md, _-prefixed root files, _trash/ contents).",
+    "review": "Goes through the normal cluster walk-through. The skill may suggest Keep or Archive; only the user can say Trash.",
+    "trash-candidate": "Eligible for soft-delete to _trash/ (whitespace-only) — ONLY after the preview/user gate."
+  },
+  "cells": {
+    "_trash/old-note": {"disposition": "protected", "signal": "-"},
+    "_vault-autopilot": {"disposition": "protected", "signal": "-"},
+    "inbox/2024 Tax Strategy Notes": {"disposition": "review", "signal": "filename"},
+    "inbox/Draft": {"disposition": "review", "signal": "lines3"},
+    "inbox/New Note": {"disposition": "review", "signal": "embed"},
+    "inbox/Quick Note": {"disposition": "review", "signal": "frontmatter"},
+    "inbox/Unbenannt": {"disposition": "exclude-sanity", "signal": "-"},
+    "inbox/Untitled": {"disposition": "review", "signal": "wikilink"},
+    "inbox/Untitled 2": {"disposition": "trash-candidate", "signal": "-"},
+    "inbox/Untitled 3": {"disposition": "delete-candidate", "signal": "-"},
+    "inbox/Untitled 4": {"disposition": "exclude-sanity", "signal": "-"},
+    "inbox/Untitled 5": {"disposition": "review", "signal": "none"}
+  },
+  "notes": {
+    "fail-safe default": "Only literally-empty content (0 bytes, pure whitespace) is ever a Nahbereich candidate. Every cell with ANY non-whitespace content — even one generic-named line with no signal (Untitled 5) — is 'review'. Deleting a valuable note is the worst failure class; uncertainty always resolves to KEEP/DEFER.",
+    "survival cells": "Untitled (one wikilink), New Note (one embed), Quick Note (frontmatter only), Draft (3 plain lines), 2024 Tax Strategy Notes (descriptive name, one line) all LOOK trashy to a naive substance heuristic and MUST survive — the signal column pins WHY each one lives.",
+    "signal precedence": "embed > wikilink > frontmatter > lines3 > filename > none (reporting order only; any single signal is sufficient to guard the note)."
+  }
+}
