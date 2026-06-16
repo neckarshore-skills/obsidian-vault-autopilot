@@ -21,9 +21,24 @@ test('nbsp-to-space: NBSP becomes a normal space', () => {
   assert.equal(only('nbsp-to-space', 'Executive Box:\u00A0250 kW'), 'Executive Box: 250 kW');
 });
 
-test('zero-width-strip: removes ZWSP/ZWNJ/ZWJ/BOM, text intact', () => {
+test('zero-width-strip: removes ZWSP/ZWNJ/BOM but preserves ZWJ, text intact', () => {
   assert.equal(only('zero-width-strip', 'Executive Box: 250 kW\u200B'), 'Executive Box: 250 kW');
-  assert.equal(only('zero-width-strip', '\uFEFFhello\u200C\u200Dworld'), 'helloworld');
+  assert.equal(only('zero-width-strip', '\uFEFFhello\u200Cworld'), 'helloworld');
+  // ZWJ (U+200D) is the emoji joiner -- preserved by design (see emoji test below).
+  assert.equal(only('zero-width-strip', 'a\u200Db'), 'a\u200Db');
+});
+
+test('zero-width-strip: ZWJ inside an emoji sequence survives (must not corrupt emoji)', () => {
+  // U+200D (ZWJ) glues emoji ZWJ-sequences into a single glyph; stripping it
+  // splits the emoji into separate glyphs -- silent content corruption.
+  // Found by 2026-06-16 real-vault UAT: 0 stray ZWJ, 11 emoji-ZWJ in the test vault.
+  // Built from explicit code points so the source carries no literal invisibles.
+  const tech   = String.fromCodePoint(0x1F9D1, 0x1F3FD, 0x200D, 0x1F4BB);          // person+skin+ZWJ+laptop
+  const family = String.fromCodePoint(0x1F468, 0x200D, 0x1F469, 0x200D, 0x1F467);  // man+ZWJ+woman+ZWJ+girl
+  const flag   = String.fromCodePoint(0x1F3F3, 0xFE0F, 0x200D, 0x1F308);           // flag+VS16+ZWJ+rainbow
+  for (const e of [tech, family, flag]) {
+    assert.equal(only('zero-width-strip', `a ${e} b`), `a ${e} b`, `ZWJ-emoji must survive`);
+  }
 });
 
 test('italic-headings-asterisk: single span unwrapped, multi-span untouched', () => {
