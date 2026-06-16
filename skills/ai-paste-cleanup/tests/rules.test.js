@@ -45,3 +45,18 @@ test('collapse-blank-lines: 2+ blank lines collapse to one', () => {
 test('strip-trailing-whitespace: trailing spaces/tabs removed, content kept', () => {
   assert.equal(only('strip-trailing-whitespace', 'line one   \nline two\t\n'), 'line one\nline two\n');
 });
+
+const { checkRule, FingerprintError } = require('../scripts/rules.js');
+
+test('fingerprint guard: a rule deleting out-of-allowlist chars throws (incident replay)', () => {
+  // Simulate the broken \x{} zero-width rule, which deleted x,B,C,D,E,F,0,2.
+  const brokenRule = { name: 'zero-width-broken', allowedRemovals: new Set(['\u200B','\u200C','\u200D','\uFEFF']) };
+  const before = 'Executive Box: 250 kW';
+  const after  = 'ecutive o: 5 kW'; // E,x,B,2,0 deleted -- out of allowlist
+  assert.throws(() => checkRule(brokenRule, before, after), FingerprintError);
+});
+
+test('fingerprint guard: an in-allowlist deletion does not throw', () => {
+  const rule = { name: 'nbsp', allowedRemovals: new Set([' ']) };
+  assert.doesNotThrow(() => checkRule(rule, 'a b', 'a b'));
+});
