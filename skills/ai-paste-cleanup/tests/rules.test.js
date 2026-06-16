@@ -60,3 +60,23 @@ test('fingerprint guard: an in-allowlist deletion does not throw', () => {
   const rule = { name: 'nbsp', allowedRemovals: new Set([' ']) };
   assert.doesNotThrow(() => checkRule(rule, 'a b', 'a b'));
 });
+
+const { MassDeletionError } = require('../scripts/rules.js');
+
+test('idempotency: applyAll twice equals applyAll once', () => {
+  const input = '## **Title**\n\n\n\nbody text   \n\n\n';
+  const once = applyAll(input).text;
+  const twice = applyAll(once);
+  assert.equal(twice.text, once);
+  assert.equal(twice.changed, false);
+  for (const v of Object.values(twice.perRule)) assert.equal(v, 0);
+});
+
+test('applyAll reports per-rule hit counts', () => {
+  const out = applyAll('## **A**\n## *B*\nplain prose line here\nx\u200By\u00A0z   ');
+  assert.equal(out.perRule['unbold-headings'], 1);
+  assert.equal(out.perRule['italic-headings-asterisk'], 1);
+  assert.equal(out.perRule['zero-width-strip'], 1);
+  assert.equal(out.perRule['nbsp-to-space'], 1);
+  assert.equal(out.perRule['strip-trailing-whitespace'], 1);
+});

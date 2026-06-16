@@ -13,11 +13,11 @@ const MASS_DELETION_RATIO = 0.25;
 //                   charset guard and covered by negative tests instead.
 // Citation (#2) is inserted at index 1 in a later task (behind the data.json gate).
 const RULES = [
-  { name: 'unbold-headings',            find: /^(#{1,6} )\*\*(.+)\*\*\s*$/gm, replace: '$1$2', allowedRemovals: new Set(['*']) },
+  { name: 'unbold-headings',            find: /^(#{1,6} )\*\*(.+)\*\*[ \t]*$/gm, replace: '$1$2', allowedRemovals: new Set(['*']) },
   { name: 'nbsp-to-space',              find: /\u00A0/gm,                      replace: ' ',    allowedRemovals: new Set(['\u00A0']) },
   { name: 'zero-width-strip',           find: /[\u200B\u200C\u200D\uFEFF]/gm,  replace: '',     allowedRemovals: new Set(['\u200B','\u200C','\u200D','\uFEFF']) },
-  { name: 'italic-headings-asterisk',   find: /^(#{1,6} )\*([^*]+)\*\s*$/gm,    replace: '$1$2', allowedRemovals: new Set(['*']) },
-  { name: 'italic-headings-underscore', find: /^(#{1,6} )_([^_]+)_\s*$/gm,      replace: '$1$2', allowedRemovals: new Set(['_']) },
+  { name: 'italic-headings-asterisk',   find: /^(#{1,6} )\*([^*]+)\*[ \t]*$/gm,    replace: '$1$2', allowedRemovals: new Set(['*']) },
+  { name: 'italic-headings-underscore', find: /^(#{1,6} )_([^_]+)_[ \t]*$/gm,      replace: '$1$2', allowedRemovals: new Set(['_']) },
   { name: 'collapse-blank-lines',       find: /\n{3,}/gm,                       replace: '\n\n', allowedRemovals: new Set(['\n']) },
   { name: 'strip-trailing-whitespace',  find: /[ \t]+$/gm,                      replace: '',     allowedRemovals: new Set([' ','\t']) },
 ];
