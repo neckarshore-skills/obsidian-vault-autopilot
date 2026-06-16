@@ -19,7 +19,10 @@ const RULES = [
   { name: 'unbold-headings',            find: /^(#{1,6} )\*\*(.+)\*\*[ \t]*$/gm, replace: '$1$2', allowedRemovals: new Set(['*']) },
   { name: 'citation-markers',           find: /\s?\[cite:[^\]]*\]/gm,           replace: '',     allowedRemovals: null },
   { name: 'nbsp-to-space',              find: /\u00A0/gm,                      replace: ' ',    allowedRemovals: new Set(['\u00A0']) },
-  { name: 'zero-width-strip',           find: /[\u200B\u200C\u200D\uFEFF]/gm,  replace: '',     allowedRemovals: new Set(['\u200B','\u200C','\u200D','\uFEFF']) },
+  // U+200D (ZWJ) deliberately EXCLUDED: it is the joiner in emoji ZWJ-sequences
+  // (e.g. person+ZWJ+laptop = technologist), so stripping it corrupts emoji.
+  // Real-vault UAT 2026-06-16: 0 stray ZWJ vs 11 emoji-ZWJ across 1592 notes.
+  { name: 'zero-width-strip',           find: /[\u200B\u200C\uFEFF]/gm,        replace: '',     allowedRemovals: new Set(['\u200B','\u200C','\uFEFF']) },
   { name: 'italic-headings-asterisk',   find: /^(#{1,6} )\*([^*]+)\*[ \t]*$/gm,    replace: '$1$2', allowedRemovals: new Set(['*']) },
   { name: 'italic-headings-underscore', find: /^(#{1,6} )_([^_]+)_[ \t]*$/gm,      replace: '$1$2', allowedRemovals: new Set(['_']) },
   { name: 'collapse-blank-lines',       find: /\n{3,}/gm,                       replace: '\n\n', allowedRemovals: new Set(['\n']) },
@@ -62,7 +65,7 @@ function checkRule(rule, before, after) {
     if (!rule.allowedRemovals.has(ch)) throw new FingerprintError(rule.name, ch, count);
   }
 }
-// NB: JS `\s` does NOT match the zero-width code points (U+200B/200C/200D), so
+// NB: JS `\s` does NOT match the zero-width code points it strips (U+200B/200C), so
 // they count as non-whitespace here. That is deliberate: a paste padded with
 // many zero-width chars will, when zero-width-strip removes them, register as a
 // large non-whitespace drop and can legitimately trip the mass-deletion backstop
