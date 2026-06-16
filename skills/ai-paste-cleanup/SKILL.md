@@ -35,6 +35,7 @@ Apply the proven-safe AI-paste cleanup transforms to a note or folder. Determini
 - **Citation rule operates on the whole file, including frontmatter.** A YAML value whose array begins with `cite:` (e.g. `tags: [cite:foo, bar]`) will be stripped. This matches the obsidian-linter plugin's own behavior. Body-scoping is backlog. Rare in practice.
 - **Mass-deletion backstop can abort short, marker-heavy pastes.** A tiny note that is mostly formatting markers (e.g. a 3-word bold heading with little body) can exceed the 25% non-whitespace-removal threshold and abort with nothing written. This fails in the safe direction. Realistic notes with body text are unaffected.
 - **No line-ending normalization.** Content is processed as-is; CRLF vs LF is not changed (structural, out of scope).
+- **Zero-width strip preserves U+200D (ZWJ).** ZWJ is the joiner in emoji ZWJ-sequences (e.g. person+ZWJ+laptop), so removing it would corrupt emoji. A genuine stray ZWJ used as paste cruft is therefore left in place; ZWSP/ZWNJ/BOM are still stripped. (Real-vault UAT 2026-06-16: 0 stray ZWJ vs 11 emoji-ZWJ.)
 
 ## Report format
 

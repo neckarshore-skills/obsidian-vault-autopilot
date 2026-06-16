@@ -65,7 +65,7 @@ function checkRule(rule, before, after) {
     if (!rule.allowedRemovals.has(ch)) throw new FingerprintError(rule.name, ch, count);
   }
 }
-// NB: JS `\s` does NOT match the zero-width code points it strips (U+200B/200C), so
+// NB: JS `\s` does NOT match U+200B/U+200C (two of the three chars this rule strips), so
 // they count as non-whitespace here. That is deliberate: a paste padded with
 // many zero-width chars will, when zero-width-strip removes them, register as a
 // large non-whitespace drop and can legitimately trip the mass-deletion backstop
