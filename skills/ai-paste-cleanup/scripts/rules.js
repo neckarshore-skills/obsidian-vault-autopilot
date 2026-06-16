@@ -11,9 +11,13 @@ const MASS_DELETION_RATIO = 0.25;
 //   allowedRemovals Set<string> of code points the rule may delete,
 //                   or null for a span-based rule (citation) exempt from the
 //                   charset guard and covered by negative tests instead.
-// Citation (#2) is inserted at index 1 in a later task (behind the data.json gate).
+// Citation (#2) is at index 1 below: pattern is byte-exact from the live
+// obsidian-linter data.json (user-gated production read). It is marker-scoped
+// to [cite:...], NOT a greedy bracket pattern, so no narrowing was needed --
+// wikilinks/links/checkboxes are provably untouched (negative tests).
 const RULES = [
   { name: 'unbold-headings',            find: /^(#{1,6} )\*\*(.+)\*\*[ \t]*$/gm, replace: '$1$2', allowedRemovals: new Set(['*']) },
+  { name: 'citation-markers',           find: /\s?\[cite:[^\]]*\]/gm,           replace: '',     allowedRemovals: null },
   { name: 'nbsp-to-space',              find: /\u00A0/gm,                      replace: ' ',    allowedRemovals: new Set(['\u00A0']) },
   { name: 'zero-width-strip',           find: /[\u200B\u200C\u200D\uFEFF]/gm,  replace: '',     allowedRemovals: new Set(['\u200B','\u200C','\u200D','\uFEFF']) },
   { name: 'italic-headings-asterisk',   find: /^(#{1,6} )\*([^*]+)\*[ \t]*$/gm,    replace: '$1$2', allowedRemovals: new Set(['*']) },

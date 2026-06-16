@@ -76,3 +76,35 @@ test('applyAll reports per-rule hit counts', () => {
   assert.equal(out.perRule['nbsp-to-space'], 1);
   assert.equal(out.perRule['strip-trailing-whitespace'], 1);
 });
+
+test('citation-markers: removes the [cite:...] marker (positive)', () => {
+  assert.equal(only('citation-markers', 'The team signed off [cite:smith2020].'), 'The team signed off.');
+  assert.equal(only('citation-markers', 'Per the spec[cite:doc-12] this holds.'), 'Per the spec this holds.');
+});
+
+test('citation-markers SAFETY: wikilinks, md-links, embeds, checkboxes survive', () => {
+  for (const s of [
+    '[[Note Name]]',
+    '[[Note|alias]]',
+    '[text](https://example.com)',
+    '![[embed.png]]',
+    '- [ ] task',
+    '- [x] done',
+  ]) {
+    assert.equal(only('citation-markers', s), s, `citation rule must not touch: ${s}`);
+  }
+});
+
+test('citation-markers: a non-cite bracket span is left untouched', () => {
+  // A long [..] span that is NOT a [cite:...] marker must not be removed.
+  const note = '[' + 'x'.repeat(500) + ']';
+  assert.doesNotThrow(() => applyAll(note));
+  assert.equal(applyAll(note).text, note);
+});
+
+test('mass-deletion guard: a note that is mostly [cite:...] markers aborts (positive throw)', () => {
+  // With the span-based citation rule, genuine over-deletion is now possible.
+  // This drives applyAll past the 25% non-whitespace-drop backstop.
+  const note = 'hi ' + '[cite:x] '.repeat(30);
+  assert.throws(() => applyAll(note), MassDeletionError);
+});
