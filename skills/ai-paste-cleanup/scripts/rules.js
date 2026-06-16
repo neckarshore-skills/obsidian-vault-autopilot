@@ -58,6 +58,12 @@ function checkRule(rule, before, after) {
     if (!rule.allowedRemovals.has(ch)) throw new FingerprintError(rule.name, ch, count);
   }
 }
+// NB: JS `\s` does NOT match the zero-width code points (U+200B/200C/200D), so
+// they count as non-whitespace here. That is deliberate: a paste padded with
+// many zero-width chars will, when zero-width-strip removes them, register as a
+// large non-whitespace drop and can legitimately trip the mass-deletion backstop
+// below. That fails in the safe direction (abort, never corrupt). NBSP (U+00A0)
+// and BOM (U+FEFF) ARE matched by `\s`, so they stay neutral to this count.
 function nonWhitespaceLength(s) {
   let n = 0;
   for (const ch of s) if (!/\s/.test(ch)) n++;

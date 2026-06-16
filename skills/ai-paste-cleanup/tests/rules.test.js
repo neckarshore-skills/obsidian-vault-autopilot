@@ -1,7 +1,7 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { applyAll, RULES } = require('../scripts/rules.js');
+const { applyAll, RULES, checkRule, FingerprintError, MassDeletionError } = require('../scripts/rules.js');
 
 // Helper: apply only the named rule (isolates a rule from the pipeline).
 function only(name, text) {
@@ -46,8 +46,6 @@ test('strip-trailing-whitespace: trailing spaces/tabs removed, content kept', ()
   assert.equal(only('strip-trailing-whitespace', 'line one   \nline two\t\n'), 'line one\nline two\n');
 });
 
-const { checkRule, FingerprintError } = require('../scripts/rules.js');
-
 test('fingerprint guard: a rule deleting out-of-allowlist chars throws (incident replay)', () => {
   // Simulate the broken \x{} zero-width rule, which deleted x,B,C,D,E,F,0,2.
   const brokenRule = { name: 'zero-width-broken', allowedRemovals: new Set(['\u200B','\u200C','\u200D','\uFEFF']) };
@@ -60,8 +58,6 @@ test('fingerprint guard: an in-allowlist deletion does not throw', () => {
   const rule = { name: 'nbsp', allowedRemovals: new Set([' ']) };
   assert.doesNotThrow(() => checkRule(rule, 'a b', 'a b'));
 });
-
-const { MassDeletionError } = require('../scripts/rules.js');
 
 test('idempotency: applyAll twice equals applyAll once', () => {
   const input = '## **Title**\n\n\n\nbody text   \n\n\n';
