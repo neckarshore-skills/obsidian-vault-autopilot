@@ -9,7 +9,7 @@ const {
   bodyTags, frontmatterTags, noteTags,
   applyOps, assertSurvival, SurvivalError,
   caseVariantGroups, separatorVariantGroups, filterReserved,
-  splitFrontmatter,
+  splitFrontmatter, auditFindings,
 } = require('../scripts/tags.js');
 
 // ---------------------------------------------------------------------------
@@ -306,4 +306,24 @@ test('separatorVariantGroups: groups - <-> _ but NOT / (nested is distinct)', ()
 });
 test('filterReserved: strips VaultAutopilot from an inventory before grouping', () => {
   assert.deepEqual(filterReserved(['ai', 'VaultAutopilot', 'ml']), ['ai', 'ml']);
+});
+
+// ---------------------------------------------------------------------------
+// Dataview tags:: vs tags: distinction
+// ---------------------------------------------------------------------------
+test('Dataview tags:: double-colon is not mis-parsed as a tags scalar', () => {
+  const note = '---\ntags:: #linkedin #karriere\n---\nbody\n';
+  assert.deepEqual(frontmatterTags(note), []);
+});
+
+// ---------------------------------------------------------------------------
+// auditFindings: invalid tag splitting (numeric vs other)
+// ---------------------------------------------------------------------------
+test('auditFindings splits invalid spellings into numeric vs other', () => {
+  const notes = [
+    { path: 'a.md', text: '---\ntags:\n  - "2026"\n  - "Make.com"\n  - Research\n---\n' },
+  ];
+  const f = auditFindings(notes);
+  assert.deepEqual(f.numericArtifacts, ['2026']);
+  assert.deepEqual(f.otherInvalidTags, ['Make.com']);
 });
