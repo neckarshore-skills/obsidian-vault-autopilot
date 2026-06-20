@@ -93,12 +93,27 @@ function planVault(dir, ops, opts = {}) {
   return applyToVault(dir, ops, { ...opts, write: false });
 }
 
+// Returns true iff fileAbs is located inside dirAbs.
+// Handles the root case (dirAbs == scan root) and sibling-prefix false-positives
+// (e.g. "Meta/Tag Management" must NOT exclude "Meta/Tag Management Notes/x.md").
+function isInside(dirAbs, fileAbs) {
+  const rel = path.relative(dirAbs, fileAbs);
+  return rel === path.basename(fileAbs) || (!!rel && !rel.startsWith('..') && !path.isAbsolute(rel));
+}
+
+// Returns true iff the file is a report artifact written by runAudit.
+// Only these files are excluded — real notes are never excluded regardless of reportDirAbs.
+const isReportArtifact = (p) => {
+  const b = path.basename(p);
+  return b === '.tag-manage-recommendations.json' || / Tag Analysis Report - .+\.md$/.test(b);
+};
+
 function runAudit(dir, { date, defaultsPath, configText, reportDirAbs, nameSuffix = '' }) {
   const dict = loadConfig({ defaultsPath, configText });
-  // Exclude the report directory from the scan so a written report note does not poison the
-  // next audit (the original skill suffered this: its Meta/TagManagement-tagged reports were
-  // re-counted on every run).
-  const notes = readNotes(dir).filter((n) => !reportDirAbs || !n.path.startsWith(reportDirAbs));
+  // Exclude only report artifacts inside reportDirAbs — never real notes.
+  // This prevents a written report note from poisoning the next audit scan,
+  // while keeping every real note in scope even when reportDirAbs == the vault root.
+  const notes = readNotes(dir).filter((n) => !(reportDirAbs && isInside(reportDirAbs, n.path) && isReportArtifact(n.path)));
   const inventory = buildInventory(notes);
   const findings = auditFindings(notes);
   const analysis = analyze(notes, inventory);

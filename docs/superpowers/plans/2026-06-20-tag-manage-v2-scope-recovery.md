@@ -387,8 +387,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 test('extractJsonFence reads the first json code block', () => {
-  const md = '# Config\n\n```json\n{"brands":{"busitec":"Busitec"}}\n```\n';
-  assert.deepEqual(extractJsonFence(md), { brands: { busitec: 'Busitec' } });
+  const md = '# Config\n\n```json\n{"brands":{"acme":"Acme"}}\n```\n';
+  assert.deepEqual(extractJsonFence(md), { brands: { acme: 'Acme' } });
 });
 test('extractJsonFence returns null when absent', () => assert.equal(extractJsonFence('# nothing'), null));
 test('mergeOverrides: local wins on collision', () => {

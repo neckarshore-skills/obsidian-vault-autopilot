@@ -144,8 +144,8 @@ fence, `JSON.parse`). Schema:
 
 ```json
 {
-  "brands":         { "busitec": "Busitec", "omnixis": "Omnixis" },
-  "compounds":      { "schulamtstuttgart": "SchulamtStuttgart" },
+  "brands":         { "acme": "Acme", "globex": "Globex" },
+  "compounds":      { "myorgunit": "MyOrgUnit" },
   "folderExclusive": { "Inbox": "001_Inbox - ...", "Clippings": "001_Inbox - .../Clippings" },
   "reportDir":      "020_Processes - .../SecondBrain/Tag Management for Obsidian"
 }
@@ -181,7 +181,7 @@ The predecessor's ~135 overrides (from the original skill file's `BRAND_OVERRIDE
 split:
 
 - **Generic** entries (GitHub, OpenSource, …) → `tag-overrides.default.json` (repo).
-- **Personal / vault-specific** entries (SchulamtStuttgart, VfB-Stuttgart, Busitec, …) → the
+- **Personal / vault-specific** entries (MyOrgUnit, MyClub-City, Acme, …) → the
   vault-local config.
 
 Nothing is lost; nothing personal lands in the public repo.
