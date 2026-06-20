@@ -22,4 +22,21 @@ function classifyTag(tag, ctx) {
   return { violation: null, severity: null };
 }
 
-module.exports = { classifyTag };
+function capitalize(w) {
+  return w ? w.charAt(0).toUpperCase() + w.slice(1) : w;
+}
+
+function pascalHeuristic(tag) {
+  const ai = tag.match(/^(ai|ki)[-_](.+)$/i);
+  if (ai) return ai[1].toUpperCase() + '-' + tag.slice(ai[1].length + 1).split(/[-_]/).map(capitalize).join('-');
+  return tag.split('/').map((seg) => seg.split(/[-_]/).map(capitalize).join('')).join('/');
+}
+
+function canonicalForm(tag, dict) {
+  const key = logicalKey(tag);
+  if (dict.brands.has(key)) return { canonical: dict.brands.get(key), source: 'brand' };
+  if (dict.compounds.has(key)) return { canonical: dict.compounds.get(key), source: 'compound' };
+  return { canonical: pascalHeuristic(tag), source: 'heuristic' };
+}
+
+module.exports = { classifyTag, canonicalForm, pascalHeuristic };
