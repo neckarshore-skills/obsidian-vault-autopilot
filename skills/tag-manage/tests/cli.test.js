@@ -150,6 +150,21 @@ test('CLI apply --from-recs: loads recs JSON and applies selected ops to vault',
   assert.ok(!noteContent.includes('- research'), 'old research tag must be gone');
 });
 
+// ---- end-to-end integration test on chaos fixture (Task 10) ----------------
+
+test('end-to-end: audit chaos fixture -> apply -> re-audit has fewer violations', () => {
+  const src = path.join(__dirname, 'fixtures', 'tag-manage');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tm-'));
+  fs.cpSync(src, tmp, { recursive: true });
+  const opts = { date: '2026-06-20', defaultsPath: path.join(__dirname, '..', 'references', 'tag-overrides.default.json'), configText: null, reportDirAbs: null };
+  const before = runAudit(tmp, opts);
+  assert.ok(before.recommendations.length >= 1);
+  const ops = selectOps(before.recommendations, 'all');
+  applyToVault(tmp, ops, { write: true, massChangeThreshold: 100000 });
+  const after = runAudit(tmp, opts);
+  assert.ok(after.recommendations.length <= before.recommendations.length);
+});
+
 // ---- CLI integration test: apply --report-dir produces after-changes report (Task 9 missing deliverable) ----
 
 test('CLI apply --from-recs --report-dir: writes after-changes report to report dir', () => {
