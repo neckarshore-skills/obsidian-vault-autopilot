@@ -17,11 +17,13 @@ const DEFAULT_MASS_CHANGE_THRESHOLD = 50;
 const SKIP_DIRS = new Set(['node_modules']);
 
 class MassChangeError extends Error {
-  constructor(count, threshold) {
-    super(`Mass-change guard: this plan would touch ${count} notes (> threshold ${threshold}). Aborting; nothing written. Re-run with a higher --max or split the operation.`);
+  constructor(count, threshold, op) {
+    const what = op ? `operation ${JSON.stringify(op)}` : 'this plan';
+    super(`Mass-change guard: ${what} would touch ${count} notes (> threshold ${threshold}). Aborting; nothing written. Re-run with a higher --max or split the operation.`);
     this.name = 'MassChangeError';
     this.count = count;
     this.threshold = threshold;
+    this.op = op || null;
   }
 }
 
@@ -54,13 +56,25 @@ function applyToVault(dir, ops, opts = {}) {
   const transform = opts.transform || ((text) => applyOps(text, ops));
 
   const notes = readNotes(dir);
+
+  // Mass-change guard is PER-OP (the brief: "if an operation would touch more than
+  // a threshold of notes"). A single catastrophic op aborts even if the plan total
+  // is modest; several individually-safe ops do not aggregate past the threshold.
+  // Skipped when a transform is injected (test seam) since per-op counting uses the
+  // real engine, not the injected transform.
+  if (!opts.transform) {
+    for (const op of ops) {
+      const opCount = notes.filter((n) => applyOps(n.text, [op]).changed).length;
+      if (opCount > threshold) throw new MassChangeError(opCount, threshold, op);
+    }
+  }
+
   const planned = notes.map((n) => {
     const r = transform(n.text); // may throw SurvivalError or an injected error
     return { path: n.path, before: n.text, after: r.text, changed: !!r.changed, bodyResidual: r.bodyResidual || [] };
   });
 
   const changedCount = planned.filter((p) => p.changed).length;
-  if (changedCount > threshold) throw new MassChangeError(changedCount, threshold);
 
   let wrote = false;
   if (write) {

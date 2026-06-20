@@ -165,6 +165,36 @@ test('applyOps rename: nested child is NOT cascaded by a parent rename (no casca
 });
 
 // ---------------------------------------------------------------------------
+// applyOps: MULTI-KEY frontmatter — keys before AND after the tag block must be
+// preserved byte-for-byte (the only path where the slice arithmetic does work).
+// ---------------------------------------------------------------------------
+test('applyOps: block-list tags between other frontmatter keys — surrounding keys untouched', () => {
+  const note = '---\ntitle: Mein Titel\ncreated: 2026-06-20\ntags:\n  - ai\naliases: [foo]\n---\n#ai body\n';
+  const out = applyOps(note, RENAME).text;
+  assert.equal(out, '---\ntitle: Mein Titel\ncreated: 2026-06-20\ntags:\n  - ml\naliases: [foo]\n---\n#ml body\n');
+});
+test('applyOps: inline-array tags between other keys — surrounding keys untouched', () => {
+  const note = '---\ntitle: X\ntags: [ai, css]\ncreated: 2026-06-20\n---\nx\n';
+  const out = applyOps(note, RENAME).text;
+  assert.equal(out, '---\ntitle: X\ntags: [ml, css]\ncreated: 2026-06-20\n---\nx\n');
+});
+test('applyOps: an unrelated op on a multi-key note is a byte-identical no-op', () => {
+  const note = '---\ntitle: X\ntags:\n  - keep\nstatus: active\n---\nbody\n';
+  const r = applyOps(note, RENAME);
+  assert.equal(r.text, note);
+  assert.equal(r.changed, false);
+});
+
+// ---------------------------------------------------------------------------
+// applyOps: CRLF line endings round-trip (repo tests CRLF deliberately elsewhere)
+// ---------------------------------------------------------------------------
+test('applyOps: CRLF note keeps its CRLF endings and rewrites correctly', () => {
+  const note = '---\r\ntags:\r\n  - ai\r\n---\r\nbody #ai end\r\n';
+  const out = applyOps(note, RENAME).text;
+  assert.equal(out, '---\r\ntags:\r\n  - ml\r\n---\r\nbody #ml end\r\n');
+});
+
+// ---------------------------------------------------------------------------
 // applyOps SURVIVAL: protected regions are byte-for-byte untouched
 // ---------------------------------------------------------------------------
 test('applyOps SURVIVAL: a #ai-looking token in code/URL/heading/wikilink survives', () => {

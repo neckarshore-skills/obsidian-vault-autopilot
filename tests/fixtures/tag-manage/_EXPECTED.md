@@ -18,6 +18,7 @@
 | 08-orphan-numeric | orphan `SoloTopic`; numeric artifact `2024` |
 | 09-untagged | untagged note |
 | 10-reserved | `VaultAutopilot` excluded from all findings |
+| 11-multi-key | real-shaped frontmatter: keys before AND after `tags:` — surrounding keys stay byte-exact on apply |
 
 ## Expected findings (summary)
 
