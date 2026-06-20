@@ -15,7 +15,7 @@ const { analyze } = require('./analysis.js');
 const { classifyTag } = require('./convention.js');
 const { buildRecommendations, buildContext } = require('./recommend.js');
 const { renderReport } = require('./report.js');
-const { loadConfig } = require('./config.js');
+const { loadConfig, extractJsonFence } = require('./config.js');
 
 // Default mass-change ceiling: a single op touching more notes than this aborts.
 const DEFAULT_MASS_CHANGE_THRESHOLD = 50;
@@ -161,8 +161,25 @@ if (require.main === module) {
   const target = rest.find((a) => !a.startsWith('--') && rest[rest.indexOf(a) - 1] !== '--ops' && rest[rest.indexOf(a) - 1] !== '--max');
   try {
     if (cmd === 'audit') {
-      if (!target) throw Object.assign(new Error('usage: cli.js audit <vault>'), { usage: true });
-      printAudit(auditVault(target));
+      if (!target) throw Object.assign(new Error('usage: cli.js audit <vault> [--report-dir DIR] [--config FILE] [--date YYYY-MM-DD]'), { usage: true });
+      const defaultsPath = path.join(__dirname, '..', 'references', 'tag-overrides.default.json');
+      const cfgFlag = getFlagValue(rest, '--config');
+      let configText = null;
+      if (cfgFlag) {
+        configText = fs.readFileSync(cfgFlag, 'utf8');
+      } else {
+        const found = walkMarkdown(target).find((p) => path.basename(p) === 'Tag Manage Config.md');
+        configText = found ? fs.readFileSync(found, 'utf8') : null;
+      }
+      const cfg = configText ? extractJsonFence(configText) : null;
+      const reportDirFlag = getFlagValue(rest, '--report-dir');
+      const reportDirAbs = reportDirFlag
+        ? path.resolve(reportDirFlag)
+        : (cfg && cfg.reportDir ? path.join(target, cfg.reportDir) : null);
+      const date = getFlagValue(rest, '--date') || new Date().toISOString().slice(0, 10);
+      const out = runAudit(target, { date, defaultsPath, configText, reportDirAbs });
+      console.log(out.report);
+      if (out.reportPath) console.error(`Report written to ${out.reportPath}`);
       process.exit(0);
     }
     if (cmd === 'plan' || cmd === 'apply') {

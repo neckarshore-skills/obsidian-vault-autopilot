@@ -6,7 +6,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { walkMarkdown, auditVault, planVault, applyToVault, MassChangeError } = require('../scripts/cli.js');
+const { spawnSync } = require('node:child_process');
+const { walkMarkdown, auditVault, planVault, applyToVault, MassChangeError, runAudit } = require('../scripts/cli.js');
 
 function tmpVault(files) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tagm-'));
@@ -99,8 +100,6 @@ test('mass-change throw: a single op exceeding the threshold aborts and writes n
   }
 });
 
-const { runAudit } = require('../scripts/cli.js');
-
 test('runAudit produces a report + recommendations without writing notes', () => {
   const dir = path.join(__dirname, 'fixtures-audit');
   // fixture dir created in Step 3
@@ -108,4 +107,13 @@ test('runAudit produces a report + recommendations without writing notes', () =>
   assert.match(out.report, /Tag Analysis Report/);
   assert.ok(Array.isArray(out.recommendations));
   assert.equal(out.reportPath, null); // no reportDir -> report not written
+});
+
+test('CLI audit subcommand prints the rich report (no write without --report-dir)', () => {
+  const cli = path.join(__dirname, '..', 'scripts', 'cli.js');
+  const dir = path.join(__dirname, 'fixtures-audit');
+  const r = spawnSync('node', [cli, 'audit', dir, '--date', '2026-06-20'], { encoding: 'utf8' });
+  assert.equal(r.status, 0);
+  assert.match(r.stdout, /Tag Analysis Report/);
+  assert.match(r.stdout, /Health Score/);
 });
