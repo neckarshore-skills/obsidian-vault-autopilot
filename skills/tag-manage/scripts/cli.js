@@ -10,7 +10,12 @@
 // no new inode, unlike the Edit/Write tools), exit codes 0 / 1 / 2.
 const fs = require('node:fs');
 const path = require('node:path');
-const { applyOps, auditFindings } = require('./tags.js');
+const { applyOps, auditFindings, buildInventory } = require('./tags.js');
+const { analyze } = require('./analysis.js');
+const { classifyTag } = require('./convention.js');
+const { buildRecommendations, buildContext } = require('./recommend.js');
+const { renderReport } = require('./report.js');
+const { loadConfig, extractJsonFence } = require('./config.js');
 
 // Default mass-change ceiling: a single op touching more notes than this aborts.
 const DEFAULT_MASS_CHANGE_THRESHOLD = 50;
@@ -88,7 +93,53 @@ function planVault(dir, ops, opts = {}) {
   return applyToVault(dir, ops, { ...opts, write: false });
 }
 
-module.exports = { walkMarkdown, readNotes, auditVault, applyToVault, planVault, MassChangeError, DEFAULT_MASS_CHANGE_THRESHOLD };
+// Returns true iff fileAbs is located inside dirAbs.
+// Handles the root case (dirAbs == scan root) and sibling-prefix false-positives
+// (e.g. "Meta/Tag Management" must NOT exclude "Meta/Tag Management Notes/x.md").
+function isInside(dirAbs, fileAbs) {
+  const rel = path.relative(dirAbs, fileAbs);
+  return rel === path.basename(fileAbs) || (!!rel && !rel.startsWith('..') && !path.isAbsolute(rel));
+}
+
+// Returns true iff the file is a report artifact written by runAudit.
+// Only these files are excluded — real notes are never excluded regardless of reportDirAbs.
+const isReportArtifact = (p) => {
+  const b = path.basename(p);
+  return b === '.tag-manage-recommendations.json' || / Tag Analysis Report - .+\.md$/.test(b);
+};
+
+function runAudit(dir, { date, defaultsPath, configText, reportDirAbs, nameSuffix = '' }) {
+  const dict = loadConfig({ defaultsPath, configText });
+  // Exclude only report artifacts inside reportDirAbs — never real notes.
+  // This prevents a written report note from poisoning the next audit scan,
+  // while keeping every real note in scope even when reportDirAbs == the vault root.
+  const notes = readNotes(dir).filter((n) => !(reportDirAbs && isInside(reportDirAbs, n.path) && isReportArtifact(n.path)));
+  const inventory = buildInventory(notes);
+  const findings = auditFindings(notes);
+  const analysis = analyze(notes, inventory);
+  const recommendations = buildRecommendations(inventory, dict, notes);
+  const ctx = buildContext(inventory, dict);
+  const violators = inventory.filter((r) => classifyTag(r.display, ctx).violation).length;
+  const conformityPct = inventory.length ? Math.round(((inventory.length - violators) / inventory.length) * 100) : 100;
+  const coveragePct = analysis.totalNotes ? Math.round((analysis.taggedNotes / analysis.totalNotes) * 100) : 0;
+  const singletonRatioPct = inventory.length ? Math.round((analysis.singletons.length / inventory.length) * 100) : 0;
+  const report = renderReport({ scope: 'Vault-wide', date, analysis, findings,
+    recommendations, healthScore: { conformityPct, coveragePct, singletonRatioPct } });
+  let reportPath = null;
+  if (reportDirAbs) {
+    reportPath = path.join(reportDirAbs, `${date} Tag Analysis Report - Vault-wide${nameSuffix}.md`);
+    fs.writeFileSync(reportPath, report, 'utf8');
+    fs.writeFileSync(path.join(reportDirAbs, `.tag-manage-recommendations.json`), JSON.stringify(recommendations, null, 2), 'utf8');
+  }
+  return { report, recommendations, reportPath };
+}
+
+function selectOps(recommendations, selection) {
+  const picked = selection === 'all' ? recommendations : recommendations.filter((r) => selection.includes(r.id));
+  return picked.flatMap((r) => r.ops);
+}
+
+module.exports = { walkMarkdown, readNotes, auditVault, applyToVault, planVault, MassChangeError, DEFAULT_MASS_CHANGE_THRESHOLD, runAudit, selectOps };
 
 // ---- CLI -------------------------------------------------------------------
 
@@ -125,23 +176,66 @@ function printPlan(res, header) {
   }
 }
 
+// Resolve config discovery + report-dir from CLI flags and vault-level config note.
+// Returns { defaultsPath, configText, reportDirAbs, date } — shared by audit and apply.
+function resolveReportContext(target, rest) {
+  const defaultsPath = path.join(__dirname, '..', 'references', 'tag-overrides.default.json');
+  const cfgFlag = getFlagValue(rest, '--config');
+  let configText = null;
+  if (cfgFlag) {
+    configText = fs.readFileSync(cfgFlag, 'utf8');
+  } else {
+    const found = walkMarkdown(target).find((p) => path.basename(p) === 'Tag Manage Config.md');
+    configText = found ? fs.readFileSync(found, 'utf8') : null;
+  }
+  const cfg = configText ? extractJsonFence(configText) : null;
+  const reportDirFlag = getFlagValue(rest, '--report-dir');
+  const reportDirAbs = reportDirFlag
+    ? path.resolve(reportDirFlag)
+    : (cfg && cfg.reportDir ? path.join(target, cfg.reportDir) : null);
+  const date = getFlagValue(rest, '--date') || new Date().toISOString().slice(0, 10);
+  return { defaultsPath, configText, reportDirAbs, date };
+}
+
 if (require.main === module) {
   const [cmd, ...rest] = process.argv.slice(2);
-  const target = rest.find((a) => !a.startsWith('--') && rest[rest.indexOf(a) - 1] !== '--ops' && rest[rest.indexOf(a) - 1] !== '--max');
+  // Flags whose value argument must not be mistaken for the vault target.
+  const flagsWithValues = new Set(['--ops', '--max', '--from-recs', '--ids', '--report-dir', '--config', '--date']);
+  const target = rest.find((a) => !a.startsWith('--') && !flagsWithValues.has(rest[rest.indexOf(a) - 1]));
   try {
     if (cmd === 'audit') {
-      if (!target) throw Object.assign(new Error('usage: cli.js audit <vault>'), { usage: true });
-      printAudit(auditVault(target));
+      if (!target) throw Object.assign(new Error('usage: cli.js audit <vault> [--report-dir DIR] [--config FILE] [--date YYYY-MM-DD]'), { usage: true });
+      const { defaultsPath, configText, reportDirAbs, date } = resolveReportContext(target, rest);
+      const out = runAudit(target, { date, defaultsPath, configText, reportDirAbs });
+      console.log(out.report);
+      if (out.reportPath) console.error(`Report written to ${out.reportPath}`);
       process.exit(0);
     }
     if (cmd === 'plan' || cmd === 'apply') {
-      if (!target) throw Object.assign(new Error(`usage: cli.js ${cmd} <vault> --ops <file.json> [--max N]${cmd === 'apply' ? ' --write' : ''}`), { usage: true });
-      const ops = loadOps(rest);
+      if (!target) throw Object.assign(new Error(`usage: cli.js ${cmd} <vault> (--ops <file.json> | --from-recs <file.json>) [--ids 1,3] [--max N]${cmd === 'apply' ? ' --write' : ''}`), { usage: true });
       const maxRaw = getFlagValue(rest, '--max');
       const massChangeThreshold = maxRaw ? parseInt(maxRaw, 10) : undefined;
       const write = cmd === 'apply' && rest.includes('--write');
+      const fromRecs = getFlagValue(rest, '--from-recs');
+      let ops;
+      if (fromRecs) {
+        const recsData = JSON.parse(fs.readFileSync(fromRecs, 'utf8'));
+        const idsRaw = getFlagValue(rest, '--ids');
+        const selection = idsRaw ? idsRaw.split(',').map((s) => parseInt(s.trim(), 10)) : 'all';
+        ops = selectOps(recsData, selection);
+      } else {
+        ops = loadOps(rest);
+      }
       const res = applyToVault(target, ops, { write, massChangeThreshold });
       printPlan(res, write ? 'apply (WROTE)' : 'plan (dry-run, nothing written)');
+      // After a successful --write apply, emit an after-changes report if --report-dir is set.
+      if (write && res.wrote) {
+        const { defaultsPath, configText, reportDirAbs, date } = resolveReportContext(target, rest);
+        if (reportDirAbs) {
+          const afterOut = runAudit(target, { date, defaultsPath, configText, reportDirAbs, nameSuffix: ' - after changes' });
+          if (afterOut.reportPath) console.error(`After-changes report written to ${afterOut.reportPath}`);
+        }
+      }
       process.exit(0);
     }
     console.error('usage: cli.js <audit|plan|apply> <vault> [--ops file.json] [--max N] [--write]');

@@ -42,3 +42,17 @@ Default tagging convention for obsidian-vault skills. All skills that generate o
 | `OpenSource/` | Open-source project categories | `OpenSource/DevTools`, `OpenSource/AI-ML`, `OpenSource/CLI` |
 | `Protocol/` | Standards and protocols | `Protocol/Payments`, `Protocol/Identity`, `Protocol/AI` |
 | `Meta/` | Vault management and meta-notes | `Meta/TagManagement` |
+
+## Override dictionaries (canonical store for tag-manage)
+
+The `tag-manage` skill enforces this convention via two dictionary layers. **These dictionaries are the authoritative override store** — the brand list and compound list above are documentation; the dictionaries drive the compliance engine.
+
+**Shipped generic defaults** — `skills/tag-manage/references/tag-overrides.default.json`
+
+Contains curated brand and compound entries covering common tools (GitHub, ChatGPT, YouTube, LinkedIn, n8n, SaaS, LLM, API, Figma, Telegram, Instagram, NotebookLM) and common compound terms (OpenSource, LowCode, GenerativeAI, AI-ML, AI-Agents, AI-Coding, ClaudeCode, KnowledgeManagement, and others). MIT-licensed generic defaults — no vault-specific personal brands.
+
+**Vault-local overrides** — `Tag Manage Config.md` in the vault (auto-discovered by filename)
+
+A Markdown note containing a `json` fenced code block with `brands`, `compounds`, and optionally `reportDir` fields. Vault-local entries win over the shipped defaults on collision. Add personal brands, project-specific abbreviations, and vault-specific compound terms here. See the `tag-manage` skill for the full config schema.
+
+The merge follows the rule: vault-local overrides first, shipped defaults fill the rest. Neither layer is edited directly by the engine — the agent writes the vault-local config note as a one-time setup step.

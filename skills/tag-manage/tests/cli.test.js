@@ -6,7 +6,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { walkMarkdown, auditVault, planVault, applyToVault, MassChangeError } = require('../scripts/cli.js');
+const { spawnSync } = require('node:child_process');
+const { walkMarkdown, auditVault, planVault, applyToVault, MassChangeError, runAudit, selectOps } = require('../scripts/cli.js');
 
 function tmpVault(files) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tagm-'));
@@ -96,5 +97,142 @@ test('mass-change throw: a single op exceeding the threshold aborts and writes n
   // nothing written: every note still has the old tag
   for (let i = 0; i < 5; i++) {
     assert.ok(fs.readFileSync(path.join(dir, `n${i}.md`), 'utf8').includes('- ai'));
+  }
+});
+
+test('runAudit produces a report + recommendations without writing notes', () => {
+  const dir = path.join(__dirname, 'fixtures-audit');
+  // fixture dir created in Step 3
+  const out = runAudit(dir, { date: '2026-06-20', defaultsPath: path.join(__dirname, '..', 'references', 'tag-overrides.default.json'), configText: null, reportDirAbs: null });
+  assert.match(out.report, /Tag Analysis Report/);
+  assert.ok(Array.isArray(out.recommendations));
+  assert.equal(out.reportPath, null); // no reportDir -> report not written
+});
+
+test('CLI audit subcommand prints the rich report (no write without --report-dir)', () => {
+  const cli = path.join(__dirname, '..', 'scripts', 'cli.js');
+  const dir = path.join(__dirname, 'fixtures-audit');
+  const r = spawnSync('node', [cli, 'audit', dir, '--date', '2026-06-20'], { encoding: 'utf8' });
+  assert.equal(r.status, 0);
+  assert.match(r.stdout, /Tag Analysis Report/);
+  assert.match(r.stdout, /Health Score/);
+});
+
+// ---- selectOps unit tests (Task 9) ----------------------------------------
+
+const recs = [
+  { id: 1, ops: [{ type: 'rename', from: 'research', to: 'Research' }] },
+  { id: 2, ops: [{ type: 'rename', from: 'github', to: 'GitHub' }] },
+];
+test('selectOps all returns every op', () => assert.equal(selectOps(recs, 'all').length, 2));
+test('selectOps by id filters', () => assert.deepEqual(selectOps(recs, [2]), [{ type: 'rename', from: 'github', to: 'GitHub' }]));
+
+// ---- CLI integration test: apply --from-recs (Task 9) ----------------------
+
+test('CLI apply --from-recs: loads recs JSON and applies selected ops to vault', () => {
+  const cli = path.join(__dirname, '..', 'scripts', 'cli.js');
+  const fixtureDir = path.join(__dirname, 'fixtures-audit');
+
+  // Copy fixture vault to a tmp dir so we can write safely.
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tagm-from-recs-'));
+  try {
+    fs.cpSync(fixtureDir, tmpDir, { recursive: true });
+
+    // Write a recommendations JSON for the rename research -> Research.
+    const recsJson = JSON.stringify([{ id: 1, ops: [{ type: 'rename', from: 'research', to: 'Research' }] }]);
+    const recsFile = path.join(tmpDir, 'recs.json');
+    fs.writeFileSync(recsFile, recsJson, 'utf8');
+
+    const r = spawnSync('node', [cli, 'apply', tmpDir, '--from-recs', recsFile, '--write'], { encoding: 'utf8' });
+    assert.equal(r.status, 0, `expected exit 0, got ${r.status}\nstdout:${r.stdout}\nstderr:${r.stderr}`);
+
+    const noteContent = fs.readFileSync(path.join(tmpDir, 'note.md'), 'utf8');
+    assert.ok(noteContent.includes('- Research'), 'expected Research tag in frontmatter');
+    assert.ok(!noteContent.includes('- research'), 'old research tag must be gone');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+// ---- end-to-end integration test on chaos fixture (Task 10) ----------------
+
+test('end-to-end: audit chaos fixture -> apply -> re-audit has fewer violations', () => {
+  const src = path.join(__dirname, '..', '..', '..', 'tests', 'fixtures', 'tag-manage');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tm-'));
+  try {
+    fs.cpSync(src, tmp, { recursive: true });
+    const opts = { date: '2026-06-20', defaultsPath: path.join(__dirname, '..', 'references', 'tag-overrides.default.json'), configText: null, reportDirAbs: null };
+    const before = runAudit(tmp, opts);
+    assert.ok(before.recommendations.length >= 1);
+    const ops = selectOps(before.recommendations, 'all');
+    applyToVault(tmp, ops, { write: true, massChangeThreshold: 100000 });
+    const after = runAudit(tmp, opts);
+    assert.ok(after.recommendations.length <= before.recommendations.length);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+// ---- FIX 2: runAudit root-exclusion unit test (TDD RED -> GREEN) -----------------
+// Proves: when reportDirAbs == the scan root, real notes are still scanned (totalNotes > 0)
+// and the pre-existing report artifact is excluded (totalNotes == 1, not 2).
+
+test('runAudit: reportDirAbs == scan dir still scans real notes (non-zero) and excludes report artifact', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tagm-root-excl-'));
+  try {
+    // One real note
+    fs.writeFileSync(path.join(tmpDir, 'real-note.md'), '---\ntags:\n  - research\n---\nbody\n', 'utf8');
+    // One pre-existing report artifact that should be excluded
+    fs.writeFileSync(path.join(tmpDir, '2026-06-20 Tag Analysis Report - Vault-wide.md'),
+      '---\ntags:\n  - Meta/TagManagement\n---\nreport body\n', 'utf8');
+
+    const out = runAudit(tmpDir, {
+      date: '2026-06-20',
+      defaultsPath: path.join(__dirname, '..', 'references', 'tag-overrides.default.json'),
+      configText: null,
+      reportDirAbs: tmpDir, // reportDirAbs == scan dir (the root case)
+    });
+
+    // Real note must be counted (non-zero totalNotes)
+    assert.match(out.report, /\*\*Analyzed:\*\* 1 notes/, 'exactly 1 real note must be analyzed (report artifact excluded)');
+    // Report path must be set (write happened)
+    assert.ok(out.reportPath !== null, 'reportPath should be set when reportDirAbs is given');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+// ---- CLI integration test: apply --report-dir produces after-changes report (Task 9 missing deliverable) ----
+
+test('CLI apply --from-recs --report-dir: writes after-changes report to report dir', () => {
+  const cli = path.join(__dirname, '..', 'scripts', 'cli.js');
+  const fixtureDir = path.join(__dirname, 'fixtures-audit');
+
+  // Copy fixture vault to a tmp dir so we can write safely.
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tagm-after-report-'));
+  try {
+    fs.cpSync(fixtureDir, tmpDir, { recursive: true });
+
+    // Write a recommendations JSON for the rename research -> Research.
+    const recsJson = JSON.stringify([{ id: 1, ops: [{ type: 'rename', from: 'research', to: 'Research' }] }]);
+    const recsFile = path.join(tmpDir, 'recs.json');
+    fs.writeFileSync(recsFile, recsJson, 'utf8');
+
+    const r = spawnSync(
+      'node',
+      [cli, 'apply', tmpDir, '--from-recs', recsFile, '--write', '--report-dir', tmpDir, '--date', '2026-06-20'],
+      { encoding: 'utf8' }
+    );
+    assert.equal(r.status, 0, `expected exit 0, got ${r.status}\nstdout:${r.stdout}\nstderr:${r.stderr}`);
+
+    // After-changes report must exist with the correct filename suffix.
+    const afterReport = path.join(tmpDir, '2026-06-20 Tag Analysis Report - Vault-wide - after changes.md');
+    assert.ok(fs.existsSync(afterReport), `after-changes report not found at ${afterReport}`);
+    const afterContent = fs.readFileSync(afterReport, 'utf8');
+    assert.match(afterContent, /Tag Analysis Report/);
+    // Hardened: report must show a non-zero note count — catches self-poisoning (0-note report)
+    assert.match(afterContent, /\*\*Analyzed:\*\* [1-9]/, 'after-changes report must show non-zero analyzed note count');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });

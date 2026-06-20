@@ -172,7 +172,7 @@ function bodyTags(body) {
 
 // --- frontmatter tag reader (reps 1-4) --------------------------------------
 
-const FIELD_RE = /^(\s*)(tags|tag)\s*:\s*(.*)$/;
+const FIELD_RE = /^(\s*)(tags|tag)\s*:(?!:)\s*(.*)$/;
 const ITEM_RE = /^(\s*)-\s*(.+?)\s*$/;
 
 function frontmatterTagsFromLines(lines) {
@@ -469,12 +469,14 @@ function auditFindings(notes) {
   const orphans = inventory
     .filter((r) => r.noteCount === 1 && !isReserved(r.key))
     .map((r) => ({ key: r.key, display: r.display, file: r.files[0] }));
-  const numericArtifacts = spellings.filter((s) => !isValidTag(s));
+  const invalid = spellings.filter((s) => !isValidTag(s));
+  const numericArtifacts = invalid.filter((s) => /^[\p{N}/_-]+$/u.test(s));
+  const otherInvalidTags = invalid.filter((s) => !/^[\p{N}/_-]+$/u.test(s));
   const untagged = notes.filter((n) => noteTags(n.text).length === 0).map((n) => n.path);
   return {
     totalNotes: notes.length,
     totalTags: inventory.length,
-    inventory, caseGroups, separatorGroups, orphans, numericArtifacts, untagged,
+    inventory, caseGroups, separatorGroups, orphans, numericArtifacts, otherInvalidTags, untagged,
   };
 }
 
