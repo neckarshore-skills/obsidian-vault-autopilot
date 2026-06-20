@@ -1,0 +1,17 @@
+{
+  "brands": {
+    "github": "GitHub", "chatgpt": "ChatGPT", "youtube": "YouTube", "linkedin": "LinkedIn",
+    "wordpress": "WordPress", "n8n": "n8n", "saas": "SaaS", "seo": "SEO", "gpt": "GPT",
+    "llm": "LLM", "mqtt": "MQTT", "etf": "ETF", "cms": "CMS", "api": "API", "docker": "docker",
+    "figma": "Figma", "telegram": "Telegram", "instagram": "Instagram", "notebooklm": "NotebookLM"
+  },
+  "compounds": {
+    "opensource": "OpenSource", "lowcode": "LowCode", "low-code": "LowCode",
+    "daytrading": "DayTrading", "deepresearch": "DeepResearch", "claudecode": "ClaudeCode",
+    "systemprompt": "SystemPrompt", "knowledgemanagement": "KnowledgeManagement",
+    "codereview": "CodeReview", "codequality": "CodeQuality", "generativeai": "GenerativeAI",
+    "softwaredevelopment": "SoftwareDevelopment", "appdevelopment": "AppDevelopment",
+    "webscraping": "WebScraping", "selfhosted": "SelfHosted", "uxdesign": "UXDesign",
+    "ai-ml": "AI-ML", "ai-agents": "AI-Agents", "ai-coding": "AI-Coding"
+  }
+}
