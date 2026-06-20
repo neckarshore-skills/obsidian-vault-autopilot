@@ -119,7 +119,12 @@ function runAudit(dir, { date, defaultsPath, configText, reportDirAbs }) {
   return { report, recommendations, reportPath };
 }
 
-module.exports = { walkMarkdown, readNotes, auditVault, applyToVault, planVault, MassChangeError, DEFAULT_MASS_CHANGE_THRESHOLD, runAudit };
+function selectOps(recommendations, selection) {
+  const picked = selection === 'all' ? recommendations : recommendations.filter((r) => selection.includes(r.id));
+  return picked.flatMap((r) => r.ops);
+}
+
+module.exports = { walkMarkdown, readNotes, auditVault, applyToVault, planVault, MassChangeError, DEFAULT_MASS_CHANGE_THRESHOLD, runAudit, selectOps };
 
 // ---- CLI -------------------------------------------------------------------
 
@@ -158,7 +163,9 @@ function printPlan(res, header) {
 
 if (require.main === module) {
   const [cmd, ...rest] = process.argv.slice(2);
-  const target = rest.find((a) => !a.startsWith('--') && rest[rest.indexOf(a) - 1] !== '--ops' && rest[rest.indexOf(a) - 1] !== '--max');
+  // Flags whose value argument must not be mistaken for the vault target.
+  const flagsWithValues = new Set(['--ops', '--max', '--from-recs', '--ids', '--report-dir', '--config', '--date']);
+  const target = rest.find((a) => !a.startsWith('--') && !flagsWithValues.has(rest[rest.indexOf(a) - 1]));
   try {
     if (cmd === 'audit') {
       if (!target) throw Object.assign(new Error('usage: cli.js audit <vault> [--report-dir DIR] [--config FILE] [--date YYYY-MM-DD]'), { usage: true });
@@ -183,11 +190,20 @@ if (require.main === module) {
       process.exit(0);
     }
     if (cmd === 'plan' || cmd === 'apply') {
-      if (!target) throw Object.assign(new Error(`usage: cli.js ${cmd} <vault> --ops <file.json> [--max N]${cmd === 'apply' ? ' --write' : ''}`), { usage: true });
-      const ops = loadOps(rest);
+      if (!target) throw Object.assign(new Error(`usage: cli.js ${cmd} <vault> (--ops <file.json> | --from-recs <file.json>) [--ids 1,3] [--max N]${cmd === 'apply' ? ' --write' : ''}`), { usage: true });
       const maxRaw = getFlagValue(rest, '--max');
       const massChangeThreshold = maxRaw ? parseInt(maxRaw, 10) : undefined;
       const write = cmd === 'apply' && rest.includes('--write');
+      const fromRecs = getFlagValue(rest, '--from-recs');
+      let ops;
+      if (fromRecs) {
+        const recsData = JSON.parse(fs.readFileSync(fromRecs, 'utf8'));
+        const idsRaw = getFlagValue(rest, '--ids');
+        const selection = idsRaw ? idsRaw.split(',').map((s) => parseInt(s.trim(), 10)) : 'all';
+        ops = selectOps(recsData, selection);
+      } else {
+        ops = loadOps(rest);
+      }
       const res = applyToVault(target, ops, { write, massChangeThreshold });
       printPlan(res, write ? 'apply (WROTE)' : 'plan (dry-run, nothing written)');
       process.exit(0);

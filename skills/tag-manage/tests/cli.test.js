@@ -7,7 +7,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const { walkMarkdown, auditVault, planVault, applyToVault, MassChangeError, runAudit } = require('../scripts/cli.js');
+const { walkMarkdown, auditVault, planVault, applyToVault, MassChangeError, runAudit, selectOps } = require('../scripts/cli.js');
 
 function tmpVault(files) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tagm-'));
@@ -116,4 +116,36 @@ test('CLI audit subcommand prints the rich report (no write without --report-dir
   assert.equal(r.status, 0);
   assert.match(r.stdout, /Tag Analysis Report/);
   assert.match(r.stdout, /Health Score/);
+});
+
+// ---- selectOps unit tests (Task 9) ----------------------------------------
+
+const recs = [
+  { id: 1, ops: [{ type: 'rename', from: 'research', to: 'Research' }] },
+  { id: 2, ops: [{ type: 'rename', from: 'github', to: 'GitHub' }] },
+];
+test('selectOps all returns every op', () => assert.equal(selectOps(recs, 'all').length, 2));
+test('selectOps by id filters', () => assert.deepEqual(selectOps(recs, [2]), [{ type: 'rename', from: 'github', to: 'GitHub' }]));
+
+// ---- CLI integration test: apply --from-recs (Task 9) ----------------------
+
+test('CLI apply --from-recs: loads recs JSON and applies selected ops to vault', () => {
+  const cli = path.join(__dirname, '..', 'scripts', 'cli.js');
+  const fixtureDir = path.join(__dirname, 'fixtures-audit');
+
+  // Copy fixture vault to a tmp dir so we can write safely.
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tagm-from-recs-'));
+  fs.cpSync(fixtureDir, tmpDir, { recursive: true });
+
+  // Write a recommendations JSON for the rename research -> Research.
+  const recsJson = JSON.stringify([{ id: 1, ops: [{ type: 'rename', from: 'research', to: 'Research' }] }]);
+  const recsFile = path.join(tmpDir, 'recs.json');
+  fs.writeFileSync(recsFile, recsJson, 'utf8');
+
+  const r = spawnSync('node', [cli, 'apply', tmpDir, '--from-recs', recsFile, '--write'], { encoding: 'utf8' });
+  assert.equal(r.status, 0, `expected exit 0, got ${r.status}\nstdout:${r.stdout}\nstderr:${r.stderr}`);
+
+  const noteContent = fs.readFileSync(path.join(tmpDir, 'note.md'), 'utf8');
+  assert.ok(noteContent.includes('- Research'), 'expected Research tag in frontmatter');
+  assert.ok(!noteContent.includes('- research'), 'old research tag must be gone');
 });
