@@ -208,7 +208,8 @@ const dict = { brands: new Map([['github', 'GitHub']]), compounds: new Map([['lo
 
 test('brand hit uses official casing', () => assert.deepEqual(canonicalForm('github', dict), { canonical: 'GitHub', source: 'brand' }));
 test('compound hit uses merged form', () => assert.deepEqual(canonicalForm('low-code', dict), { canonical: 'LowCode', source: 'compound' }));
-test('AI-prefix keeps hyphen, source heuristic', () => assert.deepEqual(canonicalForm('ai-ml', dict), { canonical: 'AI-ML', source: 'heuristic' }));
+test('AI-prefix keeps hyphen (heuristic best-effort; ML-casing is a dictionary job)', () => assert.deepEqual(canonicalForm('ai-foo', dict), { canonical: 'AI-Foo', source: 'heuristic' }));
+test('AI-ML resolves via dictionary, not heuristic', () => assert.deepEqual(canonicalForm('ai-ml', { brands: new Map(), compounds: new Map([['ai-ml', 'AI-ML']]) }), { canonical: 'AI-ML', source: 'compound' }));
 test('hierarchical PascalCases each segment', () => assert.deepEqual(canonicalForm('software/devtools', dict), { canonical: 'Software/Devtools', source: 'heuristic' }));
 test('single lowercase word capitalizes', () => assert.deepEqual(canonicalForm('research', dict), { canonical: 'Research', source: 'heuristic' }));
 test('snake_case joins as hyphen-free PascalCase unless AI', () => assert.deepEqual(canonicalForm('ai_agents', dict), { canonical: 'AI-Agents', source: 'heuristic' }));
@@ -371,7 +372,8 @@ git commit -m "feat(tag-manage): analysis.js — frequency, coverage, top-N, dep
     "systemprompt": "SystemPrompt", "knowledgemanagement": "KnowledgeManagement",
     "codereview": "CodeReview", "codequality": "CodeQuality", "generativeai": "GenerativeAI",
     "softwaredevelopment": "SoftwareDevelopment", "appdevelopment": "AppDevelopment",
-    "webscraping": "WebScraping", "selfhosted": "SelfHosted", "uxdesign": "UXDesign"
+    "webscraping": "WebScraping", "selfhosted": "SelfHosted", "uxdesign": "UXDesign",
+    "ai-ml": "AI-ML", "ai-agents": "AI-Agents", "ai-coding": "AI-Coding"
   }
 }
 ```
@@ -486,6 +488,21 @@ test('lowercase concept -> rename to PascalCase, source heuristic', () => {
   assert.deepEqual(r.ops, [{ type: 'rename', from: 'research', to: 'Research' }]);
 });
 
+test('uniform-lowercase brand is enforced to official casing (no mixed variant needed)', () => {
+  const notes = [{ path: 'a.md', text: '---\ntags:\n  - github\n---\n' }];
+  const recs = buildRecommendations(buildInventory(notes), dict);
+  const r = recs.find((x) => x.to === 'GitHub');
+  assert.equal(r.kind, 'rename');
+  assert.equal(r.source, 'brand');
+  assert.deepEqual(r.ops, [{ type: 'rename', from: 'github', to: 'GitHub' }]);
+});
+
+test('a compliant AI-ML (dictionary-backed) gets NO recommendation', () => {
+  const d = require('../scripts/config.js').mergeOverrides({ compounds: { 'ai-ml': 'AI-ML' } }, {});
+  const notes = [{ path: 'a.md', text: '---\ntags:\n  - AI-ML\n---\n' }];
+  assert.equal(buildRecommendations(buildInventory(notes), d).length, 0);
+});
+
 test('case variants of one logical tag -> single merge to canonical', () => {
   const notes = [
     { path: 'a.md', text: '---\ntags:\n  - github\n---\n' },
@@ -536,9 +553,14 @@ function buildRecommendations(inventory, dict) {
     const { canonical, source } = canonicalForm(r.display, dict);
     const variants = r.variants;
     const nonCanonical = variants.filter((v) => v !== canonical);
-    // Does any spelling violate the convention, or do multiple case-variants exist?
+    const dictionaryBacked = source === 'brand' || source === 'compound';
     const anyViolation = variants.some((v) => classifyTag(v, ctx).violation);
-    const needsFold = nonCanonical.length > 0 && (variants.length > 1 || anyViolation);
+    // Dictionary-backed canonicals are ENFORCED: any non-canonical spelling folds, including
+    // a uniformly-lowercase brand (github -> GitHub) with no mixed variant. Heuristic
+    // canonicals are only PROPOSED when a real convention violation exists -- never fold a
+    // compliant tag to a heuristic guess (that would rename a correct AI-ML to a wrong AI-Ml;
+    // the survival guard does NOT cover frontmatter tag renames).
+    const needsFold = nonCanonical.length > 0 && (dictionaryBacked || anyViolation);
     if (!needsFold) continue;
     const kind = variants.length > 1 ? 'merge' : 'rename';
     const ops = nonCanonical.map((v) => ({ type: 'rename', from: logicalKey(v), to: canonical }));
@@ -712,7 +734,10 @@ const { loadConfig } = require('./config.js');
 
 function runAudit(dir, { date, defaultsPath, configText, reportDirAbs }) {
   const dict = loadConfig({ defaultsPath, configText });
-  const notes = readNotes(dir);
+  // Exclude the report directory from the scan so a written report note does not poison the
+  // next audit (the original skill suffered this: its Meta/TagManagement-tagged reports were
+  // re-counted on every run).
+  const notes = readNotes(dir).filter((n) => !reportDirAbs || !n.path.startsWith(reportDirAbs));
   const inventory = buildInventory(notes);
   const findings = auditFindings(notes);
   const analysis = analyze(notes, inventory);
@@ -904,5 +929,12 @@ git commit -m "docs(tag-manage): v2 SKILL.md flow + convention dictionaries + 0.
 **Placeholder scan:** every code step shows complete, runnable code; no TBD/TODO. The one prose-only step (Task 11 SKILL.md) is documentation content, enumerated explicitly.
 
 **Type consistency:** `dict` shape `{ brands: Map, compounds: Map, brandHyphenSet: Set, folderExclusive, reportDir }` is produced by `mergeOverrides`/`loadConfig` (Task 5) and consumed identically by `buildRecommendations`/`buildContext` (Task 6), `runAudit` (Task 8). `recommendations` shape (`{id, kind, severity, from, to, notesAffected, source, ops}`) is produced in Task 6 and consumed in Tasks 7, 8, 9. `canonicalForm` returns `{canonical, source}` (Task 3) used in Task 6. Consistent.
+
+**Advisor review (pre-dispatch, applied):**
+1. **Task 3 heuristic test corrected.** `pascalHeuristic('ai-ml')` yields `AI-Ml` (the heuristic cannot know `ml -> ML`), so the heuristic test now asserts the honest case `ai-foo -> AI-Foo`; `ai-ml -> AI-ML` is a dictionary entry (added to `tag-overrides.default.json` compounds) and has its own dictionary-sourced test.
+2. **Task 6 `needsFold` logic corrected.** `needsFold = nonCanonical.length > 0 && (dictionaryBacked || anyViolation)`. Dictionary-backed canonicals are enforced (closes the uniform-lowercase-brand gap — `github -> GitHub` even with no mixed variant); heuristic canonicals fold only on a real violation (protects a compliant `AI-ML` from being renamed to the wrong `AI-Ml`, which the body-only survival guard would NOT catch). Two regression tests pin both directions.
+3. **Task 8 report self-poisoning fixed.** `runAudit` excludes `reportDirAbs` from the scan so a written report note is not re-counted on the next audit (the original skill suffered this).
+
+**Known limitation (backlog, non-blocking):** `notesAffected` uses the logical tag's `noteCount` — for a merge where some notes already carry the canonical, this over-counts the *changed* notes (the safety mass-guard still counts real `applyOps(...).changed`, so only the report number is a slight upper bound, never the write). A later refinement can compute the exact changed-count.
 
 > **Slice boundary:** C–G (hierarchy analysis, folder-exclusive enforcement, suggest mode, tag-index, cookbook loop) are explicitly out of this plan — separate spec → plan → implementation cycles.
