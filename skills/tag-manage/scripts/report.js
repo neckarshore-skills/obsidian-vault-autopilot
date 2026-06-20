@@ -1,5 +1,13 @@
 'use strict';
 // report.js — pure markdown builder. Date is injected (no clock).
+
+// Thousand separators on integer counts (1272 -> 1,272). Deterministic (regex,
+// not toLocaleString); non-integers and non-numbers pass through unchanged.
+function fmt(n) {
+  if (typeof n !== 'number' || !Number.isInteger(n)) return n;
+  return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
 function table(headers, rows) {
   const h = `| ${headers.join(' | ')} |`;
   const sep = `| ${headers.map(() => '---').join(' | ')} |`;
@@ -59,18 +67,18 @@ function renderFindings(f, a) {
     if (singletons.length > 0) {
       const shown = singletons.slice(0, 50);
       const overflow = singletons.length - shown.length;
-      const names = shown.map((t) => `\`${t.display}\``).join(', ') + (overflow > 0 ? ` (+${overflow} more)` : '');
-      parts.push(`Singletons (used in 1 note): **${singletons.length}** — ${names}`);
+      const names = shown.map((t) => `\`${t.display}\``).join(', ') + (overflow > 0 ? ` (+${fmt(overflow)} more)` : '');
+      parts.push(`Singletons (used in 1 note): **${fmt(singletons.length)}** — ${names}`);
     } else {
       parts.push('Singletons (used in 1 note): **0**');
     }
     if (lowUsage.length > 0) {
       const shown = lowUsage.slice(0, 50);
       const overflow = lowUsage.length - shown.length;
-      const rows = shown.map((t) => [`\`${t.display}\``, t.noteCount]);
-      if (overflow > 0) rows.push([`(+${overflow} more)`, '']);
+      const rows = shown.map((t) => [`\`${t.display}\``, fmt(t.noteCount)]);
+      if (overflow > 0) rows.push([`(+${fmt(overflow)} more)`, '']);
       parts.push('');
-      parts.push(`Low-usage tags (2-3 notes): **${lowUsage.length}**\n`);
+      parts.push(`Low-usage tags (2-3 notes): **${fmt(lowUsage.length)}**\n`);
       parts.push(table(['Tag', 'Notes'], rows));
     }
   }
@@ -82,12 +90,12 @@ function renderReport({ scope, date, analysis: a, findings: f, recommendations: 
   const lines = [];
   lines.push(`---\ntitle: 'Tag Analysis Report - ${scope} - ${date}'\ntype: inbox\nstatus: draft\ncreated: ${date}\ntags:\n  - Meta/TagManagement\n---\n`);
   lines.push(`# Tag Analysis Report\n`);
-  lines.push(`> [!summary]\n> **Scope:** ${scope}\n> **Analyzed:** ${a.totalNotes} notes, ${a.uniqueTags} unique tags, ${a.totalAssignments} assignments\n> **Coverage:** ${h.coveragePct}% tagged\n> **Recommendations:** ${recs.length}\n`);
+  lines.push(`> [!summary]\n> **Scope:** ${scope}\n> **Analyzed:** ${fmt(a.totalNotes)} notes, ${fmt(a.uniqueTags)} unique tags, ${fmt(a.totalAssignments)} assignments\n> **Coverage:** ${h.coveragePct}% tagged\n> **Recommendations:** ${fmt(recs.length)}\n`);
   lines.push(`## Key Metrics\n\n` + table(['Metric', 'Value'], [
-    ['Total notes', a.totalNotes], ['Tagged', a.taggedNotes], ['Untagged', a.untaggedNotes],
-    ['Unique tags', a.uniqueTags], ['Avg tags/note', a.avgTagsPerNote], ['Max depth', a.maxDepth], ['Singletons', a.singletons.length],
+    ['Total notes', fmt(a.totalNotes)], ['Tagged', fmt(a.taggedNotes)], ['Untagged', fmt(a.untaggedNotes)],
+    ['Unique tags', fmt(a.uniqueTags)], ['Avg tags/note', a.avgTagsPerNote], ['Max depth', a.maxDepth], ['Singletons', fmt(a.singletons.length)],
   ]) + '\n');
-  lines.push(`## Top 20 Tags\n\n` + table(['#', 'Tag', 'Count', '% tagged'], a.topN.map((t, i) => [i + 1, `\`${t.display}\``, t.noteCount, `${t.pct}%`])) + '\n');
+  lines.push(`## Top 20 Tags\n\n` + table(['#', 'Tag', 'Count', '% tagged'], a.topN.map((t, i) => [i + 1, `\`${t.display}\``, fmt(t.noteCount), `${t.pct}%`])) + '\n');
   lines.push(`## Findings\n\n` + renderFindings(f, a) + '\n');
   lines.push(`## Recommendations\n\n` + (recs.length ? table(['#', 'Action', 'From', 'To', 'Notes', 'Note'], recs.map((r) => [
     r.id, `${r.kind} (${r.severity})`, `\`${r.from}\``, `\`${r.to}\``, r.notesAffected, r.source === 'heuristic' ? 'verify casing (not in dictionary)' : r.source,

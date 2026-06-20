@@ -1,7 +1,14 @@
 'use strict';
 // recommend.js — turn the inventory + convention verdicts into prioritized recs with ops.
-const { logicalKey, isReserved, applyOps } = require('./tags.js');
+const { logicalKey, isReserved, isValidTag, applyOps } = require('./tags.js');
 const { classifyTag, canonicalForm } = require('./convention.js');
+
+// An acronym spelling: all uppercase letters/digits, >=2 chars, at least one
+// letter (so "12" is not an acronym, "MCP"/"B2B"/"E2E" are). Used to prefer a
+// real all-caps spelling the vault already uses over a Title-case heuristic guess.
+function isAcronym(s) {
+  return s.length >= 2 && /^[\p{Lu}\p{N}]+$/u.test(s) && /\p{Lu}/u.test(s);
+}
 
 function buildContext(inventory, dict) {
   const leaves = new Set();
@@ -18,17 +25,27 @@ function buildRecommendations(inventory, dict, notes) {
   let id = 0;
   for (const r of inventory) {
     if (isReserved(r.key)) continue;
-    const { canonical, source } = canonicalForm(r.display, dict);
+    // Invalid / numeric artifacts (`1`, `1-3`, `Make.com`) are NOT real tags. They are
+    // reported under "Invalid tags" for review, never turned into a rename rec (the
+    // `1-3 -> 13` UAT bug). Removal of invalids is a separate opt-in, not part of "apply all".
+    if (!isValidTag(r.display)) continue;
     const variants = r.variants;
+    let { canonical, source } = canonicalForm(r.display, dict);
+    // If the resolver fell back to the Title-case heuristic but the vault already uses a real
+    // all-caps spelling (GEO, PRD, B2B), prefer that acronym over the heuristic guess (Geo).
+    if (source === 'heuristic') {
+      const acro = variants.find(isAcronym);
+      if (acro) { canonical = acro; source = 'acronym'; }
+    }
     const nonCanonical = variants.filter((v) => v !== canonical);
     const dictionaryBacked = source === 'brand' || source === 'compound';
     const anyViolation = variants.some((v) => classifyTag(v, ctx).violation);
-    // Dictionary-backed canonicals are ENFORCED: any non-canonical spelling folds, including
-    // a uniformly-lowercase brand (github -> GitHub) with no mixed variant. Heuristic
-    // canonicals are only PROPOSED when a real convention violation exists -- never fold a
-    // compliant tag to a heuristic guess (that would rename a correct AI-ML to a wrong AI-Ml;
-    // the survival guard does NOT cover frontmatter tag renames).
-    const needsFold = nonCanonical.length > 0 && (dictionaryBacked || anyViolation);
+    // A real case/spelling duplicate of one logical tag (variants.length > 1) is itself a
+    // reason to fold, even when no single variant trips a classifyTag violation
+    // (e.g. AI-Testing / AI-testing). A single compliant non-dict tag (one variant) is NOT
+    // touched -- the do-no-harm guard against renaming a correct tag to a heuristic guess.
+    const isDuplicate = variants.length > 1;
+    const needsFold = nonCanonical.length > 0 && (dictionaryBacked || anyViolation || isDuplicate);
     if (!needsFold) continue;
     const kind = variants.length > 1 ? 'merge' : 'rename';
     const ops = nonCanonical.map((v) => ({ type: 'rename', from: logicalKey(v), to: canonical }));
