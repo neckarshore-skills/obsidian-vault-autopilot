@@ -10,7 +10,12 @@
 // no new inode, unlike the Edit/Write tools), exit codes 0 / 1 / 2.
 const fs = require('node:fs');
 const path = require('node:path');
-const { applyOps, auditFindings } = require('./tags.js');
+const { applyOps, auditFindings, buildInventory } = require('./tags.js');
+const { analyze } = require('./analysis.js');
+const { classifyTag } = require('./convention.js');
+const { buildRecommendations, buildContext } = require('./recommend.js');
+const { renderReport } = require('./report.js');
+const { loadConfig } = require('./config.js');
 
 // Default mass-change ceiling: a single op touching more notes than this aborts.
 const DEFAULT_MASS_CHANGE_THRESHOLD = 50;
@@ -88,7 +93,33 @@ function planVault(dir, ops, opts = {}) {
   return applyToVault(dir, ops, { ...opts, write: false });
 }
 
-module.exports = { walkMarkdown, readNotes, auditVault, applyToVault, planVault, MassChangeError, DEFAULT_MASS_CHANGE_THRESHOLD };
+function runAudit(dir, { date, defaultsPath, configText, reportDirAbs }) {
+  const dict = loadConfig({ defaultsPath, configText });
+  // Exclude the report directory from the scan so a written report note does not poison the
+  // next audit (the original skill suffered this: its Meta/TagManagement-tagged reports were
+  // re-counted on every run).
+  const notes = readNotes(dir).filter((n) => !reportDirAbs || !n.path.startsWith(reportDirAbs));
+  const inventory = buildInventory(notes);
+  const findings = auditFindings(notes);
+  const analysis = analyze(notes, inventory);
+  const recommendations = buildRecommendations(inventory, dict);
+  const ctx = buildContext(inventory, dict);
+  const violators = inventory.filter((r) => classifyTag(r.display, ctx).violation).length;
+  const conformityPct = inventory.length ? Math.round(((inventory.length - violators) / inventory.length) * 100) : 100;
+  const coveragePct = analysis.totalNotes ? Math.round((analysis.taggedNotes / analysis.totalNotes) * 100) : 0;
+  const singletonRatioPct = inventory.length ? Math.round((analysis.singletons.length / inventory.length) * 100) : 0;
+  const report = renderReport({ scope: 'Vault-wide', date, analysis, findings,
+    recommendations, healthScore: { conformityPct, coveragePct, singletonRatioPct } });
+  let reportPath = null;
+  if (reportDirAbs) {
+    reportPath = path.join(reportDirAbs, `${date} Tag Analysis Report - Vault-wide.md`);
+    fs.writeFileSync(reportPath, report, 'utf8');
+    fs.writeFileSync(path.join(reportDirAbs, `.tag-manage-recommendations.json`), JSON.stringify(recommendations, null, 2), 'utf8');
+  }
+  return { report, recommendations, reportPath };
+}
+
+module.exports = { walkMarkdown, readNotes, auditVault, applyToVault, planVault, MassChangeError, DEFAULT_MASS_CHANGE_THRESHOLD, runAudit };
 
 // ---- CLI -------------------------------------------------------------------
 

@@ -98,3 +98,14 @@ test('mass-change throw: a single op exceeding the threshold aborts and writes n
     assert.ok(fs.readFileSync(path.join(dir, `n${i}.md`), 'utf8').includes('- ai'));
   }
 });
+
+const { runAudit } = require('../scripts/cli.js');
+
+test('runAudit produces a report + recommendations without writing notes', () => {
+  const dir = path.join(__dirname, 'fixtures-audit');
+  // fixture dir created in Step 3
+  const out = runAudit(dir, { date: '2026-06-20', defaultsPath: path.join(__dirname, '..', 'references', 'tag-overrides.default.json'), configText: null, reportDirAbs: null });
+  assert.match(out.report, /Tag Analysis Report/);
+  assert.ok(Array.isArray(out.recommendations));
+  assert.equal(out.reportPath, null); // no reportDir -> report not written
+});
