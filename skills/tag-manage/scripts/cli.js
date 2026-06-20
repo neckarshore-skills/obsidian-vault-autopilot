@@ -93,7 +93,7 @@ function planVault(dir, ops, opts = {}) {
   return applyToVault(dir, ops, { ...opts, write: false });
 }
 
-function runAudit(dir, { date, defaultsPath, configText, reportDirAbs }) {
+function runAudit(dir, { date, defaultsPath, configText, reportDirAbs, nameSuffix = '' }) {
   const dict = loadConfig({ defaultsPath, configText });
   // Exclude the report directory from the scan so a written report note does not poison the
   // next audit (the original skill suffered this: its Meta/TagManagement-tagged reports were
@@ -112,7 +112,7 @@ function runAudit(dir, { date, defaultsPath, configText, reportDirAbs }) {
     recommendations, healthScore: { conformityPct, coveragePct, singletonRatioPct } });
   let reportPath = null;
   if (reportDirAbs) {
-    reportPath = path.join(reportDirAbs, `${date} Tag Analysis Report - Vault-wide.md`);
+    reportPath = path.join(reportDirAbs, `${date} Tag Analysis Report - Vault-wide${nameSuffix}.md`);
     fs.writeFileSync(reportPath, report, 'utf8');
     fs.writeFileSync(path.join(reportDirAbs, `.tag-manage-recommendations.json`), JSON.stringify(recommendations, null, 2), 'utf8');
   }
@@ -161,6 +161,27 @@ function printPlan(res, header) {
   }
 }
 
+// Resolve config discovery + report-dir from CLI flags and vault-level config note.
+// Returns { defaultsPath, configText, reportDirAbs, date } — shared by audit and apply.
+function resolveReportContext(target, rest) {
+  const defaultsPath = path.join(__dirname, '..', 'references', 'tag-overrides.default.json');
+  const cfgFlag = getFlagValue(rest, '--config');
+  let configText = null;
+  if (cfgFlag) {
+    configText = fs.readFileSync(cfgFlag, 'utf8');
+  } else {
+    const found = walkMarkdown(target).find((p) => path.basename(p) === 'Tag Manage Config.md');
+    configText = found ? fs.readFileSync(found, 'utf8') : null;
+  }
+  const cfg = configText ? extractJsonFence(configText) : null;
+  const reportDirFlag = getFlagValue(rest, '--report-dir');
+  const reportDirAbs = reportDirFlag
+    ? path.resolve(reportDirFlag)
+    : (cfg && cfg.reportDir ? path.join(target, cfg.reportDir) : null);
+  const date = getFlagValue(rest, '--date') || new Date().toISOString().slice(0, 10);
+  return { defaultsPath, configText, reportDirAbs, date };
+}
+
 if (require.main === module) {
   const [cmd, ...rest] = process.argv.slice(2);
   // Flags whose value argument must not be mistaken for the vault target.
@@ -169,21 +190,7 @@ if (require.main === module) {
   try {
     if (cmd === 'audit') {
       if (!target) throw Object.assign(new Error('usage: cli.js audit <vault> [--report-dir DIR] [--config FILE] [--date YYYY-MM-DD]'), { usage: true });
-      const defaultsPath = path.join(__dirname, '..', 'references', 'tag-overrides.default.json');
-      const cfgFlag = getFlagValue(rest, '--config');
-      let configText = null;
-      if (cfgFlag) {
-        configText = fs.readFileSync(cfgFlag, 'utf8');
-      } else {
-        const found = walkMarkdown(target).find((p) => path.basename(p) === 'Tag Manage Config.md');
-        configText = found ? fs.readFileSync(found, 'utf8') : null;
-      }
-      const cfg = configText ? extractJsonFence(configText) : null;
-      const reportDirFlag = getFlagValue(rest, '--report-dir');
-      const reportDirAbs = reportDirFlag
-        ? path.resolve(reportDirFlag)
-        : (cfg && cfg.reportDir ? path.join(target, cfg.reportDir) : null);
-      const date = getFlagValue(rest, '--date') || new Date().toISOString().slice(0, 10);
+      const { defaultsPath, configText, reportDirAbs, date } = resolveReportContext(target, rest);
       const out = runAudit(target, { date, defaultsPath, configText, reportDirAbs });
       console.log(out.report);
       if (out.reportPath) console.error(`Report written to ${out.reportPath}`);
@@ -206,6 +213,14 @@ if (require.main === module) {
       }
       const res = applyToVault(target, ops, { write, massChangeThreshold });
       printPlan(res, write ? 'apply (WROTE)' : 'plan (dry-run, nothing written)');
+      // After a successful --write apply, emit an after-changes report if --report-dir is set.
+      if (write && res.wrote) {
+        const { defaultsPath, configText, reportDirAbs, date } = resolveReportContext(target, rest);
+        if (reportDirAbs) {
+          const afterOut = runAudit(target, { date, defaultsPath, configText, reportDirAbs, nameSuffix: ' - after changes' });
+          if (afterOut.reportPath) console.error(`After-changes report written to ${afterOut.reportPath}`);
+        }
+      }
       process.exit(0);
     }
     console.error('usage: cli.js <audit|plan|apply> <vault> [--ops file.json] [--max N] [--write]');

@@ -149,3 +149,31 @@ test('CLI apply --from-recs: loads recs JSON and applies selected ops to vault',
   assert.ok(noteContent.includes('- Research'), 'expected Research tag in frontmatter');
   assert.ok(!noteContent.includes('- research'), 'old research tag must be gone');
 });
+
+// ---- CLI integration test: apply --report-dir produces after-changes report (Task 9 missing deliverable) ----
+
+test('CLI apply --from-recs --report-dir: writes after-changes report to report dir', () => {
+  const cli = path.join(__dirname, '..', 'scripts', 'cli.js');
+  const fixtureDir = path.join(__dirname, 'fixtures-audit');
+
+  // Copy fixture vault to a tmp dir so we can write safely.
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tagm-after-report-'));
+  fs.cpSync(fixtureDir, tmpDir, { recursive: true });
+
+  // Write a recommendations JSON for the rename research -> Research.
+  const recsJson = JSON.stringify([{ id: 1, ops: [{ type: 'rename', from: 'research', to: 'Research' }] }]);
+  const recsFile = path.join(tmpDir, 'recs.json');
+  fs.writeFileSync(recsFile, recsJson, 'utf8');
+
+  const r = spawnSync(
+    'node',
+    [cli, 'apply', tmpDir, '--from-recs', recsFile, '--write', '--report-dir', tmpDir, '--date', '2026-06-20'],
+    { encoding: 'utf8' }
+  );
+  assert.equal(r.status, 0, `expected exit 0, got ${r.status}\nstdout:${r.stdout}\nstderr:${r.stderr}`);
+
+  // After-changes report must exist with the correct filename suffix.
+  const afterReport = path.join(tmpDir, '2026-06-20 Tag Analysis Report - Vault-wide - after changes.md');
+  assert.ok(fs.existsSync(afterReport), `after-changes report not found at ${afterReport}`);
+  assert.match(fs.readFileSync(afterReport, 'utf8'), /Tag Analysis Report/);
+});
