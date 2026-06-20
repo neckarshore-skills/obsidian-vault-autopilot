@@ -1,101 +1,150 @@
 ---
 name: tag-manage
-status: deferred
-description: Use when an Obsidian vault needs tag auditing, cleanup, or content-based tag suggestions. Trigger phrases - "analyze tags", "audit tags", "fix tags", "suggest tags", "tag cleanup", "find duplicate tags", "unused tags", "tag consistency", "auto-tag notes". Also trigger when the user mentions orphan tags, tag hierarchy issues, convention violations, or untagged notes needing tags.
+status: beta
+description: Use when an Obsidian vault needs tag auditing or cleanup of EXISTING tags - finding duplicates, case inconsistencies, orphan tags, separator variants, or convention violations, then renaming, merging, or removing tags behind a preview-and-confirm gate. Trigger phrases - "audit tags", "analyze tags", "fix tags", "tag cleanup", "find duplicate tags", "merge tags", "rename tag", "unused tags", "orphan tags", "tag consistency". Also trigger when the user mentions inconsistent tag casing, separator variants, or numeric tag artifacts. Does NOT invent new tags from note content (that is a later version).
 ---
-
-> **Deferred** — This skill is not active in v0.1.0. It is planned for a future release.
 
 # Tag Manage
 
-Audit vault tags for issues and suggest new tags from content. Two modes: **audit** (find problems) and **suggest** (fill gaps). Authority: `references/tag-convention.md`.
+Audit a vault's existing tags and apply guided cleanup: rename, merge, remove orphans, fix
+convention violations. **Cleanup normalizes/consolidates tags that already exist — it never
+invents new ones** (content-based auto-tagging is a later version, out of scope here).
+
+The engine is a deterministic Node script (`scripts/tags.js` + `scripts/cli.js`). Determinism is
+the safety guarantee — never hand-edit notes to "clean tags." The AI proposes consolidations and
+runs the gate; the script does every byte-level rewrite.
+
+> **Read first:** [`references/tag-semantics.md`](../../references/tag-semantics.md) (Step 0 finding —
+> Obsidian matches tags case-insensitively, which is why case-fixes are cosmetic and a different op
+> class than true merges) and [`references/tag-convention.md`](../../references/tag-convention.md)
+> (the casing convention used as the target when the user opts into case-normalization).
 
 ## Principle: Core + Nahbereich + Report
 
-- **Core:** Detect tag issues + suggest tags for untagged notes
-- **Nahbereich:** Auto-fix obvious convention violations (lowercase → PascalCase)
-- **Report:** Tag health, changes, suggestions for manual review
+- **Core:** Audit existing tags + apply user-approved rename / merge / remove ops across all six
+  on-disk tag representations consistently.
+- **Nahbereich:** None destructive beyond the approved ops. The survival guard aborts the whole run
+  rather than risk corrupting a code span, URL, heading, or wikilink.
+- **Report:** Tag inventory, cosmetic vs functional findings, orphans, numeric artifacts, untagged
+  notes, and what each approved op would change — routed to other skills where relevant.
 
-## Parameters
+## Two stages (safe-half first)
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `cooldown_days` | 3 | Skip notes created within the last N days. Use file creation date (birthtime). |
-| `scope` | inbox | Which folder to scan. `inbox` = inbox only. `vault` = entire vault. User confirms before execution. |
-| `mode` | full | `audit` (find problems), `suggest` (fill gaps), or `full` (both). |
+| Stage | What | Writes? | Gate |
+|-------|------|---------|------|
+| 1 | `audit` + `plan` — inventory, proposed convention, exact "what I would change" diffs | no | review checkpoint (reviewable on its own) |
+| 2 | `apply` — execute the approved ops | yes | confirm gate |
 
-## Protected Files
+## How to run
 
-Never process or modify these files (see `references/vault-autopilot-note.md`):
-- `_vault-autopilot.md` in vault root
-- Any file starting with `_` in vault root (reserved for plugin management)
+**Stage 1 — audit (read-only):**
+```
+node "${CLAUDE_PLUGIN_ROOT}/skills/tag-manage/scripts/cli.js" audit <vault>
+```
+Show the user the inventory and the two finding classes:
+- **Cosmetic (case variants).** Per Step 0, Obsidian already treats `#AI` and `#ai` as one tag, so
+  fixing case is a *display* normalization, not a functional merge. Surface it, but recommend it is
+  **opt-in** — do not bundle it into the default cleanup.
+- **Functional duplicates** (separator variants like `ai-ml` / `ai_ml`, and — proposed by you, the
+  AI, from the inventory — singular/plural, abbreviations, synonyms). These are real distinct tags.
 
-## Modes
+From the audit + the user's choices, build an **ops list** (JSON):
+```json
+[
+  { "type": "rename", "from": "javascript", "to": "JavaScript" },
+  { "type": "merge",  "from": ["ai-ml", "ai_ml"], "to": "AI-ML" },
+  { "type": "remove", "from": "tmp" }
+]
+```
+`rename` (one→one), `merge` (N→one, **irreversible**), `remove` (orphan/unused, **frontmatter-only**).
 
-| Trigger | Mode |
-|---------|------|
-| "audit tags", "tag report", "check consistency" | `audit` |
-| "suggest tags", "auto-tag", "untagged notes" | `suggest` |
-| "fix tags", "tag cleanup" | `full` (both) — default |
+**Stage 1 — plan (dry-run preview, still no writes):**
+```
+node ".../cli.js" plan <vault> --ops ops.json
+```
+Show the per-note diffs. **Human gate:** for any merge, state that it is irreversible (you cannot
+tell afterwards which note had which source tag). For more than 10 affected notes, first state
+"I will change tags in N notes in <vault>. Confirm?" and wait.
 
-## Audit Checks
+**Stage 2 — apply (only after explicit confirmation):**
+```
+node ".../cli.js" apply <vault> --ops ops.json --write
+```
+If the script exits non-zero with `ABORTED — Survival guard...` or `ABORTED — Mass-change guard...`,
+**do not retry blindly.** A survival abort means a rewrite would have touched a non-tag byte
+(code/URL/heading/wikilink); a mass-change abort means the op exceeds the safety threshold
+(default 50 notes — raise with `--max N` only after a deliberate review). Nothing was written.
 
-| # | Check | Finds |
-|---|-------|-------|
-| 1 | Duplicates | Case variants, singular/plural, abbreviation vs. full |
-| 2 | Convention violations | Non-PascalCase, `#`-prefixed, lowercase concepts |
-| 3 | Hierarchy conflicts | Same leaf under different parents |
-| 4 | Orphans | Single-use tags, parent with single child |
-| 5 | Numeric artifacts | Numbers parsed as tags from Markdown tables |
+## What an operation hits (the logical tag)
 
-Each issue: affected notes, recommended canonical form, severity (high/medium/low).
+A logical tag is rewritten consistently across all six representations: frontmatter block-list,
+inline-array, single-scalar, legacy `tag:` key, inline body `#tag`, and nested `#parent/child`
+(handled as a whole-path unit — renaming `ai` does NOT cascade into `ai/coding`). Matching is
+case-insensitive (Step 0); the target casing you supply is written verbatim.
 
-## Suggest Logic
+## Survival guarantees (non-negotiable — tested byte-exact)
 
-For untagged notes — read title, frontmatter, first ~800 chars:
-
-1. Match against existing vault tag vocabulary (prefer known tags)
-2. Extract topics, entities, content type, domain
-3. Score: High (known, freq 5+), Medium (known or clear topic), Low (inferred)
-4. Max 5 per note, PascalCase per convention
-
-## Workflow
-
-1. **Discover vault** — resolve `${OBSIDIAN_VAULT_PATH}`. Confirm scope.
-2. **Build vocabulary** — all tags with frequencies across vault.
-3. **Audit** — run checks, compile issues with severity.
-4. **Suggest** — find untagged notes, generate proposals.
-5. **Preview and confirm** — tables for issues + suggestions. Options: approve all, by confidence, individually.
-6. **Execute** — fix violations, merge duplicates, write tags. YAML frontmatter only.
-7. **Report and log** — append to `logs/run-history.md`.
+A `#tag`-looking token is left **byte-for-byte untouched** when it sits inside: fenced or inline
+code, a URL (`example.com/#frag`), an ATX heading marker (`# Heading` — space after `#`), or a
+`[[wikilink]]`. The structural survival guard re-tokenizes before/after and aborts if any non-tag
+byte changed. See `tests/tags.test.js` (survival + representation-matrix suites).
 
 ## Boundaries
 
-- YAML frontmatter tags only (no inline `#hashtags`)
-- No deleting notes, no modifying content, no non-tag properties
-- Merges require confirmation
-- `references/tag-convention.md` is the authority
+- Operates on existing tags only. **Never invents tags from content** (auto-tagging is out of scope
+  for v1).
+- **Remove is frontmatter-only.** An inline body `#tag` is never stripped from prose (that would
+  mutate the sentence) — if a removed tag still lives in the body, it is reported, not deleted.
+- Reserved tags (`VaultAutopilot`) are never proposed for merge/rename/remove.
+- Merges require explicit confirmation and count toward the mass-change threshold.
+- In-place writes preserve filesystem birthtime (Node `fs.writeFileSync` reuses the inode).
 
-## Report Format
+## Known limitations (v1)
+
+- **No per-note skill-log callout.** Unlike note-rename, this skill does not add a `VaultAutopilot`
+  tag or `> [!info] Vault Autopilot` callout to every touched note. Rationale: a bulk tag op can
+  touch hundreds of notes, and stamping each one is a large incidental change beyond the requested
+  rewrite ("do no harm"). The tag rewrite is the only change, which keeps re-runs provably
+  idempotent. Run-level traceability lives in the report and `logs/run-history.md`. Adding per-note
+  skill-log (with the `#143` date-only-vs-`HH:MM` callout-dedup handling) is a tracked follow-up.
+- **No content-based auto-tagging** (scope C — a later version).
+- **Near-duplicate detection is deterministic for case + separator only.** Singular/plural,
+  abbreviations, and synonyms are AI-proposed from the inventory and always confirmed by the user
+  (a German vault breaks naive trailing-`s` stripping).
+
+## Protected files
+
+Files and folders starting with `_` or `.` are excluded (`_trash/`, `_secret/`, `.obsidian/`,
+`_vault-autopilot.md`). Production-vault runs follow the repo's Production Vault Safety Rules (gate
+before switching vaults; confirm before touching more than 10 files).
+
+## Report format
 
 ```
-## Tag Manage Report — [Date]
+## tag-manage Report — <date>
 
 ### Audit
-- Duplicates: X groups | Violations: X | Conflicts: X | Orphans: X
+- <N> notes, <M> logical tags
+- Cosmetic (case variants): <count> groups
+- Functional duplicates (separator): <count> groups
+- Orphans: <count> | Numeric artifacts: <count> | Untagged notes: <count>
 
-### Suggest
-- Untagged: X | Suggested: X | Written: X
-
-### Nahbereich
-- Auto-fixes: X
+### Done (Stage 2 only)
+- Renamed: <count> | Merged: <count> groups | Removed: <count>
+- Notes changed: <N>
 
 ### Findings
-- [Observations, convention update suggestions]
+- <inline-body residuals after a frontmatter-only remove>
+- <observations routed to other skills>
+
+### Unchanged
+- <count> notes already consistent
 ```
 
-## Quality Check
+## Quality check
 
-- [ ] All tags follow `references/tag-convention.md`
-- [ ] Duplicate merges updated all affected notes
-- [ ] Preview confirmed before writing
+- [ ] Step 1 audit shown before any write; case findings flagged cosmetic (opt-in)
+- [ ] Every merge flagged irreversible; >10-note runs confirmed first
+- [ ] `apply` only after explicit user confirmation
+- [ ] Survival + representation-matrix + idempotency + mass-change suites green (`scripts/test-tag-manage.sh`)
+- [ ] No invented tags; remove stayed frontmatter-only

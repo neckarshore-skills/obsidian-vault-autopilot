@@ -2,6 +2,12 @@
 
 Default tagging convention for obsidian-vault skills. All skills that generate or modify tags MUST follow these rules. The brand list and hierarchy prefixes are opinionated defaults — a future config system will make them customizable per vault.
 
+> **Case is cosmetic, not functional.** Obsidian matches tags case-insensitively (`#AI` and `#ai`
+> are the same tag) — see [`tag-semantics.md`](tag-semantics.md) for the Step 0 finding. The PascalCase
+> rules below are an opinionated *display* convention, not a functional fix. `tag-manage` therefore
+> treats case-normalization as an opt-in (default OFF) cosmetic operation, and uses this file as the
+> source for the target casing when the user opts in.
+
 ## Rules
 
 | # | Rule | Convention | Examples | When to apply |

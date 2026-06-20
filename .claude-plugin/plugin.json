@@ -1,6 +1,6 @@
 {
   "name": "obsidian-vault-autopilot",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "AI-powered vault autopilot — sorts, renames, tags, and enriches your Obsidian notes automatically.",
   "author": {
     "name": "Neckarshore AI",

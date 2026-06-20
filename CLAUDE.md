@@ -6,7 +6,7 @@
 
 **Organization:** Neckarshore AI
 **License:** MIT
-**Status:** Public (v0.1.5)
+**Status:** Public (v0.1.6)
 
 ## Plugin Structure
 
@@ -24,7 +24,7 @@ logs/
   run-history.md           <- Skill execution log
 ```
 
-## Skills (4 launch-scope + 2 in-development + 1 deferred)
+## Skills (4 launch-scope + 3 in-development)
 
 Launch-scope = Cycle-4 Gold-Run validated (see D19 in the internal decisions ledger). In-development beta skills live in the codebase but were not part of the launch-scope test matrix.
 
@@ -36,7 +36,7 @@ Launch-scope = Cycle-4 Gold-Run validated (see D19 in the internal decisions led
 | 4 | property-describe | Generate note descriptions | beta (launch-scope) |
 | 5 | note-quality-check | Score notes, suggest deletions | beta (in development) |
 | 6 | property-classify | Classify note status and type | beta (in development) |
-| 7 | tag-manage | Assign, clean up, and standardize tags | deferred (v0.2.0) |
+| 7 | tag-manage | Audit + guided cleanup of existing tags (rename/merge/remove) | beta (in development) |
 
 ## Quality Checklist per Skill
 
