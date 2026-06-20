@@ -260,6 +260,25 @@ test('applyOps idempotency: re-applying a rename on the cleaned note is a no-op'
 });
 
 // ---------------------------------------------------------------------------
+// applyOps: a rewrite whose target equals the current token is NOT a change.
+// Regression (found in UAT): a case-normalize op (AI->ai) over a note that
+// already has lowercase #ai flagged `changed` on the no-op body rewrite,
+// inflating the idempotency + mass-change counts.
+// ---------------------------------------------------------------------------
+test('applyOps: a body rewrite to the identical value does not flag changed', () => {
+  const r = applyOps('body #ai here\n', [{ type: 'rename', from: 'ai', to: 'ai' }]);
+  assert.equal(r.text, 'body #ai here\n');
+  assert.equal(r.changed, false);
+});
+test('applyOps: case-normalize AI->ai is idempotent on a vault that already has #ai', () => {
+  const once = applyOps('mix #ai and #AI\n', [{ type: 'rename', from: 'AI', to: 'ai' }]);
+  assert.equal(once.text, 'mix #ai and #ai\n');
+  const twice = applyOps(once.text, [{ type: 'rename', from: 'AI', to: 'ai' }]);
+  assert.equal(twice.changed, false);
+  assert.equal(twice.text, once.text);
+});
+
+// ---------------------------------------------------------------------------
 // assertSurvival: the structural guard throws when a non-tag byte changes
 // (anti-vacuous-green — the guard itself must be provably able to fire)
 // ---------------------------------------------------------------------------

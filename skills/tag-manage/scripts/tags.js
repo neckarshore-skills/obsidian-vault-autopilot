@@ -237,11 +237,13 @@ function rewriteBodyTags(body, map) {
   for (const t of tags) {
     out += body.slice(pos, t.start);
     const k = logicalKey(t.tag);
+    const oldTok = body.slice(t.start, t.end);
     if (map.has(k) && map.get(k) !== null) {
-      out += '#' + map.get(k);
-      changed = true;
+      const newTok = '#' + map.get(k);
+      out += newTok;
+      if (newTok !== oldTok) changed = true; // a no-op rewrite (target == current) is not a change
     } else {
-      out += body.slice(t.start, t.end); // unchanged (removes are frontmatter-only)
+      out += oldTok; // unchanged (removes are frontmatter-only)
     }
     pos = t.end;
   }
