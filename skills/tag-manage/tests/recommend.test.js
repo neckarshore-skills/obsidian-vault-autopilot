@@ -51,3 +51,23 @@ test('recommendations are sorted by notesAffected desc', () => {
   const recs = buildRecommendations(buildInventory(notes), dict);
   for (let i = 1; i < recs.length; i++) assert.ok(recs[i - 1].notesAffected >= recs[i].notesAffected);
 });
+
+// UAT regression: when the first-seen display is already the canonical form (e.g.
+// LinkedIn appears in 3 notes before the minority linkedin), from must show the
+// non-canonical variant, not the canonical, and notesAffected must count only the
+// notes that actually change (the one carrying linkedin), not total noteCount (4).
+test('UAT regression: from = non-canonical variant, notesAffected = real changed-note count', () => {
+  const d = require('../scripts/config.js').mergeOverrides({ brands: { linkedin: 'LinkedIn' } }, {});
+  const notes = [
+    { path: 'a.md', text: '---\ntags:\n  - LinkedIn\n---\n' },
+    { path: 'b.md', text: '---\ntags:\n  - LinkedIn\n---\n' },
+    { path: 'c.md', text: '---\ntags:\n  - LinkedIn\n---\n' },
+    { path: 'd.md', text: '---\ntags:\n  - linkedin\n---\n' },
+  ];
+  const recs = buildRecommendations(buildInventory(notes), d, notes);
+  const r = recs.find((x) => x.to === 'LinkedIn');
+  assert.ok(r, 'recommendation for LinkedIn must exist');
+  assert.equal(r.from, 'linkedin', 'from must be the non-canonical variant, not the canonical');
+  assert.equal(r.to, 'LinkedIn');
+  assert.equal(r.notesAffected, 1, 'only d.md changes; a/b/c are already canonical (no-op)');
+});

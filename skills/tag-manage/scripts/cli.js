@@ -117,7 +117,7 @@ function runAudit(dir, { date, defaultsPath, configText, reportDirAbs, nameSuffi
   const inventory = buildInventory(notes);
   const findings = auditFindings(notes);
   const analysis = analyze(notes, inventory);
-  const recommendations = buildRecommendations(inventory, dict);
+  const recommendations = buildRecommendations(inventory, dict, notes);
   const ctx = buildContext(inventory, dict);
   const violators = inventory.filter((r) => classifyTag(r.display, ctx).violation).length;
   const conformityPct = inventory.length ? Math.round(((inventory.length - violators) / inventory.length) * 100) : 100;

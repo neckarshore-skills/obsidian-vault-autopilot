@@ -1,6 +1,6 @@
 'use strict';
 // recommend.js — turn the inventory + convention verdicts into prioritized recs with ops.
-const { logicalKey, isReserved } = require('./tags.js');
+const { logicalKey, isReserved, applyOps } = require('./tags.js');
 const { classifyTag, canonicalForm } = require('./convention.js');
 
 function buildContext(inventory, dict) {
@@ -9,8 +9,11 @@ function buildContext(inventory, dict) {
   return { brandSet: new Set(dict.brands.keys()), brandHyphenSet: dict.brandHyphenSet, hierarchicalLeaves: leaves };
 }
 
-function buildRecommendations(inventory, dict) {
+function buildRecommendations(inventory, dict, notes) {
   const ctx = buildContext(inventory, dict);
+  // Build a path -> text map for efficient per-rec changed-note counting.
+  // Only constructed when notes are provided; otherwise we fall back to noteCount.
+  const byPath = notes ? new Map(notes.map((n) => [n.path, n.text])) : null;
   const recs = [];
   let id = 0;
   for (const r of inventory) {
@@ -29,8 +32,21 @@ function buildRecommendations(inventory, dict) {
     if (!needsFold) continue;
     const kind = variants.length > 1 ? 'merge' : 'rename';
     const ops = nonCanonical.map((v) => ({ type: 'rename', from: logicalKey(v), to: canonical }));
+    // from = the non-canonical variant spellings being folded (not the canonical first-seen display).
+    const from = nonCanonical.join(', ');
+    // notesAffected = notes that actually change. Bounded by r.files (candidate set for this
+    // logical tag); we only run applyOps over those, not the full vault. Falls back to
+    // r.noteCount when notes are not supplied (backward-compat).
+    let notesAffected = r.noteCount;
+    if (byPath) {
+      notesAffected = r.files
+        .map((p) => byPath.get(p))
+        .filter((t) => t !== undefined)
+        .filter((t) => applyOps(t, ops).changed)
+        .length;
+    }
     recs.push({ id: ++id, kind, severity: classifyTag(r.display, ctx).severity || 'MEDIUM',
-      from: r.display, to: canonical, notesAffected: r.noteCount, source, ops });
+      from, to: canonical, notesAffected, source, ops });
   }
   recs.sort((a, b) => b.notesAffected - a.notesAffected || a.from.localeCompare(b.from));
   recs.forEach((rr, i) => { rr.id = i + 1; });
