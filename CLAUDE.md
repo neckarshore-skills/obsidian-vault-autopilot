@@ -6,7 +6,7 @@
 
 **Organization:** Neckarshore AI
 **License:** MIT
-**Status:** Public (v0.1.6)
+**Status:** Public (v0.1.7)
 
 ## Plugin Structure
 
@@ -36,7 +36,7 @@ Launch-scope = Cycle-4 Gold-Run validated (see D19 in the internal decisions led
 | 4 | property-describe | Generate note descriptions | beta (launch-scope) |
 | 5 | note-quality-check | Score notes, suggest deletions | beta (in development) |
 | 6 | property-classify | Classify note status and type | beta (in development) |
-| 7 | tag-manage | Audit + guided cleanup of existing tags (rename/merge/remove) | beta (in development) |
+| 7 | tag-manage | Audit + convention-compliance check + guided cleanup of existing tags (rename/merge/remove, rich vault report) | beta (in development) |
 
 ## Quality Checklist per Skill
 

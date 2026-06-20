@@ -52,7 +52,7 @@ skills above.
 |---|-------|-------------|--------|
 | 1 | note-quality-check | Scores notes by quality, recommends what to keep or delete | v0.2.x |
 | 2 | property-classify | Sets lifecycle `status` and `type` properties automatically | v0.2.x |
-| 3 | tag-manage | Audits existing tags; renames, merges, and removes duplicates / case variants / orphans behind a preview-and-confirm gate | v0.1.6 |
+| 3 | tag-manage | Audits existing tags; scores against PascalCase convention (severity-classified); renames, merges, and removes duplicates / case variants / convention violations behind a preview-and-confirm gate with a rich vault-written report | v0.1.7 |
 
 **Planned** (designed but not yet active):
 

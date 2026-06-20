@@ -9,7 +9,7 @@
       "name": "obsidian-vault-autopilot",
       "source": "./",
       "description": "AI-powered vault autopilot — sorts, renames, tags, and enriches your Obsidian notes automatically.",
-      "version": "0.1.6",
+      "version": "0.1.7",
       "repository": "https://github.com/neckarshore-ai/obsidian-vault-autopilot",
       "license": "MIT",
       "keywords": ["obsidian", "obsidian-plugin", "claude-code", "agent-skills", "vault-management", "automation", "ai", "productivity"]
