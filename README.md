@@ -52,12 +52,13 @@ skills above.
 |---|-------|-------------|--------|
 | 1 | note-quality-check | Scores notes by quality, recommends what to keep or delete | v0.2.x |
 | 2 | property-classify | Sets lifecycle `status` and `type` properties automatically | v0.2.x |
+| 3 | tag-manage | Audits existing tags; renames, merges, and removes duplicates / case variants / orphans behind a preview-and-confirm gate | v0.1.6 |
 
 **Planned** (designed but not yet active):
 
 | # | Skill | What it will do | Target |
 |---|-------|----------------|--------|
-| 3 | tag-manage | Audits tag quality, suggests tags from content, cleans duplicates | v0.2.0 |
+| 1 | tag-manage (auto-tagging) | Suggests tags from note content for untagged notes (extends the audit + cleanup skill) | v0.3.0 |
 
 Want to help shape any of these? **[Open an issue](https://github.com/neckarshore-ai/obsidian-vault-autopilot/issues)** with your use case.
 
