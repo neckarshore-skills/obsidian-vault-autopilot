@@ -153,7 +153,7 @@ test('CLI apply --from-recs: loads recs JSON and applies selected ops to vault',
 // ---- end-to-end integration test on chaos fixture (Task 10) ----------------
 
 test('end-to-end: audit chaos fixture -> apply -> re-audit has fewer violations', () => {
-  const src = path.join(__dirname, 'fixtures', 'tag-manage');
+  const src = path.join(__dirname, '..', '..', '..', 'tests', 'fixtures', 'tag-manage');
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tm-'));
   fs.cpSync(src, tmp, { recursive: true });
   const opts = { date: '2026-06-20', defaultsPath: path.join(__dirname, '..', 'references', 'tag-overrides.default.json'), configText: null, reportDirAbs: null };
