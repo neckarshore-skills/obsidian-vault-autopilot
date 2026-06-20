@@ -71,3 +71,67 @@ test('UAT regression: from = non-canonical variant, notesAffected = real changed
   assert.equal(r.to, 'LinkedIn');
   assert.equal(r.notesAffected, 1, 'only d.md changes; a/b/c are already canonical (no-op)');
 });
+
+// --- v2 scope-recovery: UAT-driven fixes (b/c/d) + dict seeding (a) ---
+const { canonicalForm } = require('../scripts/convention.js');
+const defaults = require('../references/tag-overrides.default.json');
+
+test('v2(b): an all-caps acronym variant wins over the Title-case heuristic (geo+GEO -> GEO)', () => {
+  const notes = [
+    { path: 'a.md', text: '---\ntags:\n  - geo\n---\n' },
+    { path: 'b.md', text: '---\ntags:\n  - GEO\n---\n' },
+  ];
+  const recs = buildRecommendations(buildInventory(notes), dict);
+  const r = recs.find((x) => x.to === 'GEO');
+  assert.ok(r, 'must fold to the acronym GEO, not the heuristic Geo');
+  assert.equal(r.source, 'acronym');
+  assert.equal(recs.find((x) => x.to === 'Geo'), undefined, 'must not propose the wrong Title-case Geo');
+});
+
+test('v2(d): a case-variant duplicate with no classifiable violation still folds (AI-Testing/AI-testing)', () => {
+  const notes = [
+    { path: 'a.md', text: '---\ntags:\n  - AI-Testing\n---\n' },
+    { path: 'b.md', text: '---\ntags:\n  - AI-testing\n---\n' },
+  ];
+  const recs = buildRecommendations(buildInventory(notes), dict);
+  const r = recs.find((x) => x.to === 'AI-Testing');
+  assert.ok(r, 'a real case-variant duplicate must fold even without a classifyTag violation');
+  assert.equal(r.from, 'AI-testing');
+});
+
+test('v2(d) do-no-harm PIN: a single compliant non-dict tag (Photography) produces NO rec', () => {
+  const notes = [{ path: 'a.md', text: '---\ntags:\n  - Photography\n---\n' }];
+  assert.equal(buildRecommendations(buildInventory(notes), dict).length, 0,
+    'loosening needsFold for duplicates must NOT make single compliant tags produce recs');
+});
+
+test('v2(c): a numeric/invalid artifact tag gets NO rename rec (1-3 must not become 13)', () => {
+  const notes = [{ path: 'a.md', text: '---\ntags:\n  - 1-3\n---\n' }];
+  const recs = buildRecommendations(buildInventory(notes), dict);
+  assert.equal(recs.find((x) => x.from === '1-3'), undefined, 'numeric artifact must not produce a rename rec');
+  assert.equal(recs.find((x) => x.to === '13'), undefined);
+});
+
+test('v2(a): shipped defaults resolve MCP to MCP (the mcp->mcp bug is fixed)', () => {
+  const dictReal = mergeOverrides(defaults, {});
+  assert.equal(canonicalForm('MCP', dictReal).canonical, 'MCP');
+  assert.equal(canonicalForm('mcp', dictReal).canonical, 'MCP');
+});
+
+test('v2(a): shipped defaults seed generic tech acronyms/brands (E2E, DevOps)', () => {
+  const dictReal = mergeOverrides(defaults, {});
+  assert.equal(canonicalForm('e2e', dictReal).canonical, 'E2E');
+  assert.equal(canonicalForm('devops', dictReal).canonical, 'DevOps');
+});
+
+// do-no-harm PIN (user UAT signal): real-world alphanumeric tags that LOOK numeric but
+// carry meaning -- 5G/4G (mobile network), 9a (Noah's school grade), 8bit -- are VALID
+// tags (>=1 non-numeric char). They must never be dropped as artifacts and must produce
+// no rename rec. Only PURE numerics (1, 2, 1-3) are invalid.
+test('v2(c) PIN: meaningful alphanumeric tags (5G, 4G, 9a) are valid and get NO rec', () => {
+  for (const tag of ['5G', '4G', '9a']) {
+    const notes = [{ path: 'a.md', text: `---\ntags:\n  - ${tag}\n---\n` }];
+    const recs = buildRecommendations(buildInventory(notes), dict);
+    assert.equal(recs.length, 0, `${tag} is a meaningful tag, not an artifact -- it must not be renamed or removed`);
+  }
+});

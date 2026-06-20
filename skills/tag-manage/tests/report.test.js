@@ -97,3 +97,23 @@ test('renderReport Findings section — empty findings degrade to None.', () => 
   // must not throw
   assert.doesNotThrow(() => renderReport(emptyFindingsData));
 });
+
+// --- v2(e): thousand separators on large integer counts ---
+
+test('v2(e): large integer counts render with thousand separators', () => {
+  const big = {
+    ...data,
+    analysis: {
+      ...data.analysis,
+      totalNotes: 1272, taggedNotes: 1127, uniqueTags: 1469, totalAssignments: 5019,
+      singletons: Array.from({ length: 1004 }, (_, i) => ({ key: `k${i}`, display: `K${i}`, noteCount: 1 })),
+    },
+  };
+  const md = renderReport(big);
+  assert.match(md, /1,272/);
+  assert.match(md, /1,469/);
+  assert.match(md, /5,019/);
+  assert.match(md, /1,004/); // singleton count
+  assert.doesNotMatch(md, /\b1272\b/, 'raw un-separated 1272 must not appear');
+  assert.equal(md, renderReport(big)); // still deterministic
+});
