@@ -40,3 +40,37 @@ test('suggestReportDir: existing tag-management folder is a continuity alternati
   const cont = r.candidates.find((c) => c.exists === true);
   assert.ok(cont && /Tag Management for Obsidian/.test(cont.relpath), 'continuity option surfaced');
 });
+
+const { setReportDir } = require('../scripts/report-home.js');
+
+test('setReportDir: creates Tag Manage Config.md when absent', () => {
+  const v = tmpVault({ 'a.md': 'x\n' });
+  const r = setReportDir(v, 'Meta/Tag Management');
+  assert.equal(r.created, true);
+  const txt = fs.readFileSync(path.join(v, 'Tag Manage Config.md'), 'utf8');
+  assert.match(txt, /```json[\s\S]*"reportDir": "Meta\/Tag Management"[\s\S]*```/);
+});
+
+test('setReportDir: updates reportDir but preserves existing brands', () => {
+  const v = tmpVault({ 'Tag Manage Config.md': '# cfg\n\n```json\n{\n  "brands": { "mcp": "MCP" }\n}\n```\n' });
+  setReportDir(v, 'Meta/TM');
+  const cfg = require('../scripts/config.js').extractJsonFence(
+    fs.readFileSync(path.join(v, 'Tag Manage Config.md'), 'utf8'));
+  assert.equal(cfg.reportDir, 'Meta/TM');
+  assert.equal(cfg.brands.mcp, 'MCP'); // preserved
+});
+
+test('setReportDir: is idempotent', () => {
+  const v = tmpVault({ 'a.md': 'x\n' });
+  setReportDir(v, 'Meta/TM');
+  const once = fs.readFileSync(path.join(v, 'Tag Manage Config.md'), 'utf8');
+  setReportDir(v, 'Meta/TM');
+  assert.equal(fs.readFileSync(path.join(v, 'Tag Manage Config.md'), 'utf8'), once);
+});
+
+test('setReportDir: rejects absolute and .. paths, writes nothing', () => {
+  const v = tmpVault({ 'a.md': 'x\n' });
+  assert.throws(() => setReportDir(v, '/etc/evil'), /vault-relative|absolute/);
+  assert.throws(() => setReportDir(v, '../outside'), /escape|\.\./);
+  assert.equal(fs.existsSync(path.join(v, 'Tag Manage Config.md')), false);
+});

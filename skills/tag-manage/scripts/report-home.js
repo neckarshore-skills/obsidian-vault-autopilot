@@ -41,4 +41,42 @@ function suggestReportDir(vault) {
   return { recommended: candidates[0].relpath, candidates };
 }
 
-module.exports = { suggestReportDir };
+function validateRelpath(relpath) {
+  if (!relpath || typeof relpath !== 'string') throw new Error('report dir path required');
+  if (path.isAbsolute(relpath) || relpath.startsWith('/')) throw new Error(`report dir must be vault-relative, got absolute: ${relpath}`);
+  if (relpath.split(/[\\/]/).includes('..')) throw new Error(`report dir must not escape the vault (..): ${relpath}`);
+  return relpath.replace(/\/+$/, '');
+}
+
+function findConfigNote(vault, base = '') {
+  for (const e of fs.readdirSync(path.join(vault, base), { withFileTypes: true })) {
+    if (SKIP(e.name)) continue;
+    const rel = base ? `${base}/${e.name}` : e.name;
+    if (e.isDirectory()) { const f = findConfigNote(vault, rel); if (f) return f; }
+    else if (e.name === 'Tag Manage Config.md') return rel;
+  }
+  return null;
+}
+
+function setReportDir(vault, relpathRaw) {
+  const relpath = validateRelpath(relpathRaw);
+  const existingRel = findConfigNote(vault);
+  if (existingRel) {
+    const full = path.join(vault, existingRel);
+    const text = fs.readFileSync(full, 'utf8');
+    const cfg = extractJsonFence(text) || {};
+    cfg.reportDir = relpath;
+    const fence = '```json\n' + JSON.stringify(cfg, null, 2) + '\n```';
+    const updated = extractJsonFence(text) != null
+      ? text.replace(/```json\s*\n[\s\S]*?\n```/, fence)
+      : `${text.replace(/\s*$/, '')}\n\n${fence}\n`;
+    fs.writeFileSync(full, updated, 'utf8');
+    return { configPath: full, created: false };
+  }
+  const full = path.join(vault, 'Tag Manage Config.md');
+  const content = `# Tag Manage Config\n\nVault-local config for the tag-manage skill. \`reportDir\` is the permanent home for tag analysis reports.\n\n\`\`\`json\n${JSON.stringify({ reportDir: relpath }, null, 2)}\n\`\`\`\n`;
+  fs.writeFileSync(full, content, 'utf8');
+  return { configPath: full, created: true };
+}
+
+module.exports = { suggestReportDir, setReportDir };
