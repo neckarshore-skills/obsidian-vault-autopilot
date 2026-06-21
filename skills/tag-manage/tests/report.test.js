@@ -100,6 +100,24 @@ test('renderReport Findings section — empty findings degrade to None.', () => 
 
 // --- v2(e): thousand separators on large integer counts ---
 
+// --- OBI-2026-06-21-2: report self-poisoning guard ---
+// obsidian-linter (move-tags-to-yaml) promotes any tag-shaped `#token` found in the
+// report PROSE into the report's OWN frontmatter as a tag, silently corrupting it on
+// every save (the user deletes the integers, the linter writes them back). The fix is
+// to emit no `#`-followed-by-a-tag-char token anywhere in the report. This guard pins
+// that: across every fixture, renderReport output must contain no `#[\w/-]` token.
+test('report emits no tag-shaped #token (obsidian-linter self-poisoning guard, OBI-2026-06-21-2)', () => {
+  for (const fixture of [data, richData, emptyFindingsData]) {
+    const md = renderReport(fixture);
+    const m = md.match(/#[\w/-]/);
+    assert.equal(
+      m,
+      null,
+      `report must contain no tag-shaped #token (scope=${fixture.scope}); found "${m ? md.slice(m.index, m.index + 14) : ''}"`
+    );
+  }
+});
+
 test('v2(e): large integer counts render with thousand separators', () => {
   const big = {
     ...data,

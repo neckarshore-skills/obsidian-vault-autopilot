@@ -66,7 +66,7 @@ node ".../cli.js" apply <vault> \
   [--max N] --write
 ```
 
-The `--from-recs` flag is the primary flow after an audit: it reads the `.tag-manage-recommendations.json` the audit wrote, optionally filtered by `--ids 1,3` (comma-separated recommendation IDs). The user can say "apply all", "apply #1, #3", or "skip #2" — map those to the `--from-recs` + `--ids` flags accordingly.
+The `--from-recs` flag is the primary flow after an audit: it reads the `.tag-manage-recommendations.json` the audit wrote, optionally filtered by `--ids 1,3` (comma-separated recommendation IDs). The user can say "apply all", "apply 1, 3", or "skip 2" (with or without a leading "#") — map those to the `--from-recs` + `--ids` flags accordingly.
 
 `--ops ops.json` is the manual escape hatch for hand-crafted operation files.
 
@@ -167,7 +167,7 @@ The audit writes a Markdown report file and a `.tag-manage-recommendations.json`
 
 The recommended convention is to set `reportDir` to a dedicated folder such as `Meta/Tag Management` in the vault-local config note — this keeps reports alongside notes and makes them browsable in Obsidian.
 
-The engine excludes the report directory from the audit scan, so previously written report notes do not inflate the tag counts on subsequent runs.
+The engine excludes its own report artifacts from both the audit and the apply scans, so a previously written report cannot inflate the tag counts — or be rewritten — on subsequent runs. Artifacts are identified by filename (the dated `Tag Analysis Report - *.md` plus the recommendations JSON) and, for sibling artifacts inside a dedicated report directory, by their `Meta/TagManagement` frontmatter marker. Marker-based exclusion is gated to a non-root report directory, so configuring the vault root as the report directory still scans every real note.
 
 ## What an operation hits (the logical tag)
 
@@ -217,7 +217,7 @@ The vault-written Markdown report contains:
 - Key Metrics table (totals, avg tags/note, max depth, singletons)
 - Top 20 Tags table (tag, count, % of tagged notes)
 - Recommendations table (id, action + severity, from, to, notes affected, source / "verify casing" notice)
-- Next Steps callout (prompts: "apply all", "apply #1, #3", "skip #2")
+- Next Steps callout (prompts: "apply all", "apply 1, 3", "skip 2")
 - Health Score table (convention conformity %, tag coverage %, singleton ratio %)
 - Update Log table
 
