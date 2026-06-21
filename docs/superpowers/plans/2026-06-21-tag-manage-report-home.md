@@ -412,7 +412,9 @@ test('applyToVault: a report artifact inside reportDirAbs is left byte-identical
   const reportName = '2026-06-21 Tag Analysis Report - Vault-wide.md';
   const v = tmpVault({
     'note.md': '---\ntags:\n  - ai\n---\n#ai body\n',
-    [`Meta/Tag Management/${reportName}`]: '---\ntags:\n  - 1\n---\nSay apply #1, #3 or skip #2\n',
+    // report fixture carries an `ai` tag so the op WOULD rewrite it without the exclusion
+    // (a `1`-only fixture would stay byte-identical regardless — a false-green test).
+    [`Meta/Tag Management/${reportName}`]: '---\ntags:\n  - ai\n---\nSay apply #1, #3 or skip #2\n',
   });
   const rd = path.join(v, 'Meta', 'Tag Management');
   const reportFull = path.join(rd, reportName);
