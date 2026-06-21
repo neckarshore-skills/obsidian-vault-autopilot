@@ -93,7 +93,7 @@ test('CLI set-report-dir: writes the config note', () => {
   assert.match(fs.readFileSync(path.join(v, 'Tag Manage Config.md'), 'utf8'), /"reportDir": "Meta\/Tag Management"/);
 });
 
-const { runAudit } = require('../scripts/cli.js');
+const { runAudit, applyToVault } = require('../scripts/cli.js');
 const DEFAULTS = path.join(__dirname, '..', 'references', 'tag-overrides.default.json');
 
 test('runAudit: creates a not-yet-existing report dir instead of aborting', () => {
@@ -101,4 +101,20 @@ test('runAudit: creates a not-yet-existing report dir instead of aborting', () =
   const rd = path.join(v, 'Meta', 'Tag Management'); // does NOT exist yet
   const out = runAudit(v, { date: '2026-06-21', defaultsPath: DEFAULTS, configText: null, reportDirAbs: rd });
   assert.ok(fs.existsSync(out.reportPath), 'report written into the auto-created dir');
+});
+
+test('applyToVault: a report artifact inside reportDirAbs is left byte-identical', () => {
+  const reportName = '2026-06-21 Tag Analysis Report - Vault-wide.md';
+  const v = tmpVault({
+    'note.md': '---\ntags:\n  - ai\n---\n#ai body\n',
+    // report fixture carries an `ai` tag so the op WOULD rewrite it without the exclusion
+    // (a `1`-only fixture would stay byte-identical regardless — a false-green test).
+    [`Meta/Tag Management/${reportName}`]: '---\ntags:\n  - ai\n---\nSay apply #1, #3 or skip #2\n',
+  });
+  const rd = path.join(v, 'Meta', 'Tag Management');
+  const reportFull = path.join(rd, reportName);
+  const before = fs.readFileSync(reportFull, 'utf8');
+  applyToVault(v, [{ type: 'rename', from: 'ai', to: 'ML' }], { write: true, reportDirAbs: rd });
+  assert.equal(fs.readFileSync(reportFull, 'utf8'), before, 'report note must not be rewritten by apply');
+  assert.equal(fs.readFileSync(path.join(v, 'note.md'), 'utf8'), '---\ntags:\n  - ML\n---\n#ML body\n');
 });

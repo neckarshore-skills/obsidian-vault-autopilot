@@ -61,7 +61,7 @@ function applyToVault(dir, ops, opts = {}) {
   const threshold = opts.massChangeThreshold ?? DEFAULT_MASS_CHANGE_THRESHOLD;
   const transform = opts.transform || ((text) => applyOps(text, ops));
 
-  const notes = readNotes(dir);
+  const notes = readNotes(dir).filter((n) => !(opts.reportDirAbs && isInside(opts.reportDirAbs, n.path) && isReportArtifact(n.path)));
 
   // Mass-change guard is PER-OP (the brief: "if an operation would touch more than
   // a threshold of notes"). A single catastrophic op aborts even if the plan total
@@ -241,15 +241,13 @@ if (require.main === module) {
       } else {
         ops = loadOps(rest);
       }
-      const res = applyToVault(target, ops, { write, massChangeThreshold });
+      const { defaultsPath, configText, reportDirAbs, date } = resolveReportContext(target, rest);
+      const res = applyToVault(target, ops, { write, massChangeThreshold, reportDirAbs });
       printPlan(res, write ? 'apply (WROTE)' : 'plan (dry-run, nothing written)');
       // After a successful --write apply, emit an after-changes report if --report-dir is set.
-      if (write && res.wrote) {
-        const { defaultsPath, configText, reportDirAbs, date } = resolveReportContext(target, rest);
-        if (reportDirAbs) {
-          const afterOut = runAudit(target, { date, defaultsPath, configText, reportDirAbs, nameSuffix: ' - after changes' });
-          if (afterOut.reportPath) console.error(`After-changes report written to ${afterOut.reportPath}`);
-        }
+      if (write && res.wrote && reportDirAbs) {
+        const afterOut = runAudit(target, { date, defaultsPath, configText, reportDirAbs, nameSuffix: ' - after changes' });
+        if (afterOut.reportPath) console.error(`After-changes report written to ${afterOut.reportPath}`);
       }
       process.exit(0);
     }
