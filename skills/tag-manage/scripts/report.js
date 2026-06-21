@@ -3,6 +3,11 @@
 
 // The frontmatter tag every report artifact carries. Single source of truth:
 // report.js writes it; cli.js excludes artifacts by it (F1, OBI-2026-06-21-3).
+//
+// DESIGN INVARIANT: marker-based exclusion only catches artifacts that CARRY this tag.
+// Any future artifact writer (Slices C-G: Master Summary, Tag Index, Cookbook, Roadmap)
+// MUST write REPORT_MARKER_TAG into its frontmatter, or it will be scanned + apply-eligible
+// like a real note. New artifact writer => add a test asserting its output carries this tag.
 const REPORT_MARKER_TAG = 'Meta/TagManagement';
 
 // Thousand separators on integer counts (1272 -> 1,272). Deterministic (regex,
