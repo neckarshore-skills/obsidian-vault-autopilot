@@ -74,3 +74,21 @@ test('setReportDir: rejects absolute and .. paths, writes nothing', () => {
   assert.throws(() => setReportDir(v, '../outside'), /escape|\.\./);
   assert.equal(fs.existsSync(path.join(v, 'Tag Manage Config.md')), false);
 });
+
+const { spawnSync } = require('node:child_process');
+const CLI = path.join(__dirname, '..', 'scripts', 'cli.js');
+
+test('CLI suggest-report-dir: prints ranked JSON', () => {
+  const v = tmpVault({ 'Meta/x.md': 'x\n' });
+  const r = spawnSync('node', [CLI, 'suggest-report-dir', v], { encoding: 'utf8' });
+  assert.equal(r.status, 0);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.recommended, 'Meta/Tag Management');
+});
+
+test('CLI set-report-dir: writes the config note', () => {
+  const v = tmpVault({ 'a.md': 'x\n' });
+  const r = spawnSync('node', [CLI, 'set-report-dir', v, 'Meta/Tag Management'], { encoding: 'utf8' });
+  assert.equal(r.status, 0);
+  assert.match(fs.readFileSync(path.join(v, 'Tag Manage Config.md'), 'utf8'), /"reportDir": "Meta\/Tag Management"/);
+});

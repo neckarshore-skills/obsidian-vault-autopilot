@@ -16,6 +16,7 @@ const { classifyTag } = require('./convention.js');
 const { buildRecommendations, buildContext } = require('./recommend.js');
 const { renderReport } = require('./report.js');
 const { loadConfig, extractJsonFence } = require('./config.js');
+const { suggestReportDir, setReportDir } = require('./report-home.js');
 
 // Default mass-change ceiling: a single op touching more notes than this aborts.
 const DEFAULT_MASS_CHANGE_THRESHOLD = 50;
@@ -202,7 +203,20 @@ if (require.main === module) {
   // Flags whose value argument must not be mistaken for the vault target.
   const flagsWithValues = new Set(['--ops', '--max', '--from-recs', '--ids', '--report-dir', '--config', '--date']);
   const target = rest.find((a) => !a.startsWith('--') && !flagsWithValues.has(rest[rest.indexOf(a) - 1]));
+  const positionals = rest.filter((a, i) => !a.startsWith('--') && !flagsWithValues.has(rest[i - 1]));
   try {
+    if (cmd === 'suggest-report-dir') {
+      if (!target) throw Object.assign(new Error('usage: cli.js suggest-report-dir <vault>'), { usage: true });
+      console.log(JSON.stringify(suggestReportDir(target), null, 2));
+      process.exit(0);
+    }
+    if (cmd === 'set-report-dir') {
+      const relpath = positionals[1];
+      if (!target || !relpath) throw Object.assign(new Error('usage: cli.js set-report-dir <vault> <relpath>'), { usage: true });
+      const r = setReportDir(target, relpath);
+      console.error(`${r.created ? 'Created' : 'Updated'} ${r.configPath}`);
+      process.exit(0);
+    }
     if (cmd === 'audit') {
       if (!target) throw Object.assign(new Error('usage: cli.js audit <vault> [--report-dir DIR] [--config FILE] [--date YYYY-MM-DD]'), { usage: true });
       const { defaultsPath, configText, reportDirAbs, date } = resolveReportContext(target, rest);
