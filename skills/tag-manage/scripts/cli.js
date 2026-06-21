@@ -16,6 +16,7 @@ const { classifyTag } = require('./convention.js');
 const { buildRecommendations, buildContext } = require('./recommend.js');
 const { renderReport } = require('./report.js');
 const { loadConfig, extractJsonFence } = require('./config.js');
+const { suggestReportDir, setReportDir } = require('./report-home.js');
 
 // Default mass-change ceiling: a single op touching more notes than this aborts.
 const DEFAULT_MASS_CHANGE_THRESHOLD = 50;
@@ -60,7 +61,7 @@ function applyToVault(dir, ops, opts = {}) {
   const threshold = opts.massChangeThreshold ?? DEFAULT_MASS_CHANGE_THRESHOLD;
   const transform = opts.transform || ((text) => applyOps(text, ops));
 
-  const notes = readNotes(dir);
+  const notes = readNotes(dir).filter((n) => !(opts.reportDirAbs && isInside(opts.reportDirAbs, n.path) && isReportArtifact(n.path)));
 
   // Mass-change guard is PER-OP (the brief: "if an operation would touch more than
   // a threshold of notes"). A single catastrophic op aborts even if the plan total
@@ -127,6 +128,7 @@ function runAudit(dir, { date, defaultsPath, configText, reportDirAbs, nameSuffi
     recommendations, healthScore: { conformityPct, coveragePct, singletonRatioPct } });
   let reportPath = null;
   if (reportDirAbs) {
+    fs.mkdirSync(reportDirAbs, { recursive: true });
     reportPath = path.join(reportDirAbs, `${date} Tag Analysis Report - Vault-wide${nameSuffix}.md`);
     fs.writeFileSync(reportPath, report, 'utf8');
     fs.writeFileSync(path.join(reportDirAbs, `.tag-manage-recommendations.json`), JSON.stringify(recommendations, null, 2), 'utf8');
@@ -202,7 +204,20 @@ if (require.main === module) {
   // Flags whose value argument must not be mistaken for the vault target.
   const flagsWithValues = new Set(['--ops', '--max', '--from-recs', '--ids', '--report-dir', '--config', '--date']);
   const target = rest.find((a) => !a.startsWith('--') && !flagsWithValues.has(rest[rest.indexOf(a) - 1]));
+  const positionals = rest.filter((a, i) => !a.startsWith('--') && !flagsWithValues.has(rest[i - 1]));
   try {
+    if (cmd === 'suggest-report-dir') {
+      if (!target) throw Object.assign(new Error('usage: cli.js suggest-report-dir <vault>'), { usage: true });
+      console.log(JSON.stringify(suggestReportDir(target), null, 2));
+      process.exit(0);
+    }
+    if (cmd === 'set-report-dir') {
+      const relpath = positionals[1];
+      if (!target || !relpath) throw Object.assign(new Error('usage: cli.js set-report-dir <vault> <relpath>'), { usage: true });
+      const r = setReportDir(target, relpath);
+      console.error(`${r.created ? 'Created' : 'Updated'} ${r.configPath}`);
+      process.exit(0);
+    }
     if (cmd === 'audit') {
       if (!target) throw Object.assign(new Error('usage: cli.js audit <vault> [--report-dir DIR] [--config FILE] [--date YYYY-MM-DD]'), { usage: true });
       const { defaultsPath, configText, reportDirAbs, date } = resolveReportContext(target, rest);
@@ -226,15 +241,13 @@ if (require.main === module) {
       } else {
         ops = loadOps(rest);
       }
-      const res = applyToVault(target, ops, { write, massChangeThreshold });
+      const { defaultsPath, configText, reportDirAbs, date } = resolveReportContext(target, rest);
+      const res = applyToVault(target, ops, { write, massChangeThreshold, reportDirAbs });
       printPlan(res, write ? 'apply (WROTE)' : 'plan (dry-run, nothing written)');
       // After a successful --write apply, emit an after-changes report if --report-dir is set.
-      if (write && res.wrote) {
-        const { defaultsPath, configText, reportDirAbs, date } = resolveReportContext(target, rest);
-        if (reportDirAbs) {
-          const afterOut = runAudit(target, { date, defaultsPath, configText, reportDirAbs, nameSuffix: ' - after changes' });
-          if (afterOut.reportPath) console.error(`After-changes report written to ${afterOut.reportPath}`);
-        }
+      if (write && res.wrote && reportDirAbs) {
+        const afterOut = runAudit(target, { date, defaultsPath, configText, reportDirAbs, nameSuffix: ' - after changes' });
+        if (afterOut.reportPath) console.error(`After-changes report written to ${afterOut.reportPath}`);
       }
       process.exit(0);
     }
