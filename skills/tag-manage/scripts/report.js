@@ -1,6 +1,10 @@
 'use strict';
 // report.js — pure markdown builder. Date is injected (no clock).
 
+// The frontmatter tag every report artifact carries. Single source of truth:
+// report.js writes it; cli.js excludes artifacts by it (F1, OBI-2026-06-21-3).
+const REPORT_MARKER_TAG = 'Meta/TagManagement';
+
 // Thousand separators on integer counts (1272 -> 1,272). Deterministic (regex,
 // not toLocaleString); non-integers and non-numbers pass through unchanged.
 function fmt(n) {
@@ -88,7 +92,7 @@ function renderFindings(f, a) {
 
 function renderReport({ scope, date, analysis: a, findings: f, recommendations: recs, healthScore: h }) {
   const lines = [];
-  lines.push(`---\ntitle: 'Tag Analysis Report - ${scope} - ${date}'\ntype: inbox\nstatus: draft\ncreated: ${date}\ntags:\n  - Meta/TagManagement\n---\n`);
+  lines.push(`---\ntitle: 'Tag Analysis Report - ${scope} - ${date}'\ntype: inbox\nstatus: draft\ncreated: ${date}\ntags:\n  - ${REPORT_MARKER_TAG}\n---\n`);
   lines.push(`# Tag Analysis Report\n`);
   lines.push(`> [!summary]\n> **Scope:** ${scope}\n> **Analyzed:** ${fmt(a.totalNotes)} notes, ${fmt(a.uniqueTags)} unique tags, ${fmt(a.totalAssignments)} assignments\n> **Coverage:** ${h.coveragePct}% tagged\n> **Recommendations:** ${fmt(recs.length)}\n`);
   lines.push(`## Key Metrics\n\n` + table(['Metric', 'Value'], [
@@ -100,7 +104,10 @@ function renderReport({ scope, date, analysis: a, findings: f, recommendations: 
   lines.push(`## Recommendations\n\n` + (recs.length ? table(['#', 'Action', 'From', 'To', 'Notes', 'Note'], recs.map((r) => [
     r.id, `${r.kind} (${r.severity})`, `\`${r.from}\``, `\`${r.to}\``, r.notesAffected, r.source === 'heuristic' ? 'verify casing (not in dictionary)' : r.source,
   ])) : '_No recommendations._') + '\n');
-  lines.push(`> [!tip] Next Steps\n> Say "apply all", "apply #1, #3", or "skip #2". A before/after preview is shown before any write.\n`);
+  // No `#`-prefixed example tokens: obsidian-linter (move-tags-to-yaml) would promote
+  // a `#1`-style token from this prose into the report's own frontmatter as a tag,
+  // corrupting it on every save (OBI-2026-06-21-2). Plain numbers are linter-inert.
+  lines.push(`> [!tip] Next Steps\n> Say "apply all", "apply 1, 3", or "skip 2" (the numbers are the recommendation IDs). A before/after preview is shown before any write.\n`);
   lines.push(`## Health Score\n\n` + table(['Dimension', 'Score'], [
     ['Convention conformity', `${h.conformityPct}%`], ['Tag coverage', `${h.coveragePct}%`], ['Singleton ratio', `${h.singletonRatioPct}%`],
   ]) + '\n');
@@ -108,4 +115,4 @@ function renderReport({ scope, date, analysis: a, findings: f, recommendations: 
   return lines.join('\n');
 }
 
-module.exports = { renderReport, table };
+module.exports = { renderReport, table, REPORT_MARKER_TAG };

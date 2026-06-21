@@ -202,6 +202,75 @@ test('runAudit: reportDirAbs == scan dir still scans real notes (non-zero) and e
   }
 });
 
+// ---- OBI-2026-06-21-3 (F1): sibling report artifacts excluded by frontmatter marker ----
+// A report home accumulates SIBLING artifacts (Master Summary, Tag Index, Cookbook,
+// Roadmap, overview notes) that carry the report frontmatter marker (Meta/TagManagement)
+// but do NOT match the dated `Tag Analysis Report - *.md` filename. The old filename-only
+// exclusion left them SCANNED (inventory pollution) and APPLY-ELIGIBLE (their tag-shaped
+// content rewritten on apply --write). Marker-based exclusion (gated to non-root reportDir)
+// closes both.
+
+test('F1: sibling report artifact (marker, non-matching name) is excluded from the audit scan', () => {
+  const dir = tmpVault({
+    'note.md': '---\ntags:\n  - github\n---\nbody\n',
+    'reports/Master Summary.md': '---\ntags:\n  - Meta/TagManagement\n  - github\n---\nsummary body\n',
+  });
+  try {
+    const out = runAudit(dir, {
+      date: '2026-06-20',
+      defaultsPath: path.join(__dirname, '..', 'references', 'tag-overrides.default.json'),
+      configText: null,
+      reportDirAbs: path.join(dir, 'reports'), // dedicated sub-folder (non-root)
+    });
+    assert.match(out.report, /\*\*Analyzed:\*\* 1 notes/, 'the marker-bearing sibling must be excluded from the scan');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('F1 (do no harm): apply --write never rewrites a sibling report artifact', () => {
+  const dir = tmpVault({
+    'note.md': '---\ntags:\n  - github\n---\nbody\n',
+    'reports/Master Summary.md': '---\ntags:\n  - Meta/TagManagement\n  - github\n---\nsummary body\n',
+  });
+  const artifactPath = path.join(dir, 'reports', 'Master Summary.md');
+  const before = fs.readFileSync(artifactPath, 'utf8');
+  try {
+    const res = applyToVault(dir, [{ type: 'rename', from: 'github', to: 'GitHub' }], {
+      write: true,
+      reportDirAbs: path.join(dir, 'reports'),
+    });
+    assert.ok(res.changedCount >= 1, 'the real note should be rewritten');
+    assert.equal(
+      fs.readFileSync(artifactPath, 'utf8'),
+      before,
+      'the sibling report artifact must be byte-identical after apply (never rewritten)'
+    );
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('F1 invariant preserved: at reportDir == root, a real note carrying the marker is NOT dropped', () => {
+  // The documented invariant (cli.js): real notes stay in scope even when reportDir == root.
+  // Marker exclusion must therefore be gated OFF at root — only named artifacts excluded there.
+  const dir = tmpVault({
+    'real-but-marked.md': '---\ntags:\n  - Meta/TagManagement\n  - github\n---\na real user note that happens to carry the marker\n',
+    'plain.md': '---\ntags:\n  - github\n---\nbody\n',
+  });
+  try {
+    const out = runAudit(dir, {
+      date: '2026-06-20',
+      defaultsPath: path.join(__dirname, '..', 'references', 'tag-overrides.default.json'),
+      configText: null,
+      reportDirAbs: dir, // root case
+    });
+    assert.match(out.report, /\*\*Analyzed:\*\* 2 notes/, 'at root, the marker must NOT drop a real note');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 // ---- CLI integration test: apply --report-dir produces after-changes report (Task 9 missing deliverable) ----
 
 test('CLI apply --from-recs --report-dir: writes after-changes report to report dir', () => {

@@ -10,11 +10,11 @@
 // no new inode, unlike the Edit/Write tools), exit codes 0 / 1 / 2.
 const fs = require('node:fs');
 const path = require('node:path');
-const { applyOps, auditFindings, buildInventory } = require('./tags.js');
+const { applyOps, auditFindings, buildInventory, frontmatterTags } = require('./tags.js');
 const { analyze } = require('./analysis.js');
 const { classifyTag } = require('./convention.js');
 const { buildRecommendations, buildContext } = require('./recommend.js');
-const { renderReport } = require('./report.js');
+const { renderReport, REPORT_MARKER_TAG } = require('./report.js');
 const { loadConfig, extractJsonFence } = require('./config.js');
 const { suggestReportDir, setReportDir } = require('./report-home.js');
 
@@ -61,7 +61,7 @@ function applyToVault(dir, ops, opts = {}) {
   const threshold = opts.massChangeThreshold ?? DEFAULT_MASS_CHANGE_THRESHOLD;
   const transform = opts.transform || ((text) => applyOps(text, ops));
 
-  const notes = readNotes(dir).filter((n) => !(opts.reportDirAbs && isInside(opts.reportDirAbs, n.path) && isReportArtifact(n.path)));
+  const notes = excludeReportArtifacts(readNotes(dir), dir, opts.reportDirAbs);
 
   // Mass-change guard is PER-OP (the brief: "if an operation would touch more than
   // a threshold of notes"). A single catastrophic op aborts even if the plan total
@@ -102,19 +102,37 @@ function isInside(dirAbs, fileAbs) {
   return rel === path.basename(fileAbs) || (!!rel && !rel.startsWith('..') && !path.isAbsolute(rel));
 }
 
-// Returns true iff the file is a report artifact written by runAudit.
-// Only these files are excluded — real notes are never excluded regardless of reportDirAbs.
-const isReportArtifact = (p) => {
-  const b = path.basename(p);
-  return b === '.tag-manage-recommendations.json' || / Tag Analysis Report - .+\.md$/.test(b);
+// Returns true iff the note is a report artifact that runAudit (or a later slice) wrote
+// into the report home. Two signals:
+//   1. filename — the dated `<date> Tag Analysis Report - *.md` + the recs JSON;
+//   2. frontmatter marker (Meta/TagManagement) — catches SIBLING artifacts that do NOT
+//      match the dated filename (Master Summary, Tag Index, Cookbook, Roadmap, overview
+//      notes). F1 / OBI-2026-06-21-3: filename-only exclusion left these scanned (inventory
+//      pollution) and apply-eligible (rewritten on --write).
+// markerEligible is false when reportDir == the vault root, preserving the documented
+// invariant that real notes are never dropped at root (only named artifacts are there).
+const isReportArtifact = (note, markerEligible) => {
+  const b = path.basename(note.path);
+  if (b === '.tag-manage-recommendations.json' || / Tag Analysis Report - .+\.md$/.test(b)) return true;
+  if (markerEligible && frontmatterTags(note.text).some((f) => f.tag.toLowerCase() === REPORT_MARKER_TAG.toLowerCase())) return true;
+  return false;
 };
+
+// Drop report artifacts that live inside reportDirAbs. Marker-based exclusion is gated to
+// a non-root reportDir (path-resolved compare) so reportDir == vault root still scans every
+// real note (only named artifacts excluded there). Shared by audit and the apply/plan path.
+function excludeReportArtifacts(notes, dir, reportDirAbs) {
+  if (!reportDirAbs) return notes;
+  const markerEligible = path.resolve(reportDirAbs) !== path.resolve(dir);
+  return notes.filter((n) => !(isInside(reportDirAbs, n.path) && isReportArtifact(n, markerEligible)));
+}
 
 function runAudit(dir, { date, defaultsPath, configText, reportDirAbs, nameSuffix = '' }) {
   const dict = loadConfig({ defaultsPath, configText });
   // Exclude only report artifacts inside reportDirAbs — never real notes.
   // This prevents a written report note from poisoning the next audit scan,
   // while keeping every real note in scope even when reportDirAbs == the vault root.
-  const notes = readNotes(dir).filter((n) => !(reportDirAbs && isInside(reportDirAbs, n.path) && isReportArtifact(n.path)));
+  const notes = excludeReportArtifacts(readNotes(dir), dir, reportDirAbs);
   const inventory = buildInventory(notes);
   const findings = auditFindings(notes);
   const analysis = analyze(notes, inventory);
