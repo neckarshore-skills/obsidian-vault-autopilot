@@ -128,6 +128,7 @@ function runAudit(dir, { date, defaultsPath, configText, reportDirAbs, nameSuffi
     recommendations, healthScore: { conformityPct, coveragePct, singletonRatioPct } });
   let reportPath = null;
   if (reportDirAbs) {
+    fs.mkdirSync(reportDirAbs, { recursive: true });
     reportPath = path.join(reportDirAbs, `${date} Tag Analysis Report - Vault-wide${nameSuffix}.md`);
     fs.writeFileSync(reportPath, report, 'utf8');
     fs.writeFileSync(path.join(reportDirAbs, `.tag-manage-recommendations.json`), JSON.stringify(recommendations, null, 2), 'utf8');

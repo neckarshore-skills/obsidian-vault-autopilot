@@ -92,3 +92,13 @@ test('CLI set-report-dir: writes the config note', () => {
   assert.equal(r.status, 0);
   assert.match(fs.readFileSync(path.join(v, 'Tag Manage Config.md'), 'utf8'), /"reportDir": "Meta\/Tag Management"/);
 });
+
+const { runAudit } = require('../scripts/cli.js');
+const DEFAULTS = path.join(__dirname, '..', 'references', 'tag-overrides.default.json');
+
+test('runAudit: creates a not-yet-existing report dir instead of aborting', () => {
+  const v = tmpVault({ 'a.md': '---\ntags:\n  - ai\n---\nx\n' });
+  const rd = path.join(v, 'Meta', 'Tag Management'); // does NOT exist yet
+  const out = runAudit(v, { date: '2026-06-21', defaultsPath: DEFAULTS, configText: null, reportDirAbs: rd });
+  assert.ok(fs.existsSync(out.reportPath), 'report written into the auto-created dir');
+});
