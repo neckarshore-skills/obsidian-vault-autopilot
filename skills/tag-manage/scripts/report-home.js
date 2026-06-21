@@ -67,8 +67,13 @@ function setReportDir(vault, relpathRaw) {
     const cfg = extractJsonFence(text) || {};
     cfg.reportDir = relpath;
     const fence = '```json\n' + JSON.stringify(cfg, null, 2) + '\n```';
-    const updated = extractJsonFence(text) != null
-      ? text.replace(/```json\s*\n[\s\S]*?\n```/, fence)
+    const hasFence = /```json\s*\n[\s\S]*?\n```/.test(text);
+    const parseable = extractJsonFence(text) != null;
+    if (hasFence && !parseable) {
+      throw new Error(`existing ${existingRel} has an unparseable json fence — fix it manually before setting reportDir`);
+    }
+    const updated = parseable
+      ? text.replace(/```json\s*\n[\s\S]*?\n```/, () => fence)  // function repl: no $-substitution
       : `${text.replace(/\s*$/, '')}\n\n${fence}\n`;
     fs.writeFileSync(full, updated, 'utf8');
     return { configPath: full, created: false };

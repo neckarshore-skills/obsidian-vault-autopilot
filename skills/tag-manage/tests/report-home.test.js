@@ -118,3 +118,18 @@ test('applyToVault: a report artifact inside reportDirAbs is left byte-identical
   assert.equal(fs.readFileSync(reportFull, 'utf8'), before, 'report note must not be rewritten by apply');
   assert.equal(fs.readFileSync(path.join(v, 'note.md'), 'utf8'), '---\ntags:\n  - ML\n---\n#ML body\n');
 });
+
+test('setReportDir: a $-bearing preserved value is not corrupted by replace substitution', () => {
+  const v = tmpVault({ 'Tag Manage Config.md': '# cfg\n\n```json\n{\n  "brands": { "x": "A$&B$$C" }\n}\n```\n' });
+  setReportDir(v, 'Meta/TM');
+  const txt = fs.readFileSync(path.join(v, 'Tag Manage Config.md'), 'utf8');
+  assert.equal((txt.match(/```json/g) || []).length, 1, 'exactly one json fence');
+  const cfg = require('../scripts/config.js').extractJsonFence(txt);
+  assert.equal(cfg.reportDir, 'Meta/TM');
+  assert.equal(cfg.brands.x, 'A$&B$$C', 'brand value preserved verbatim');
+});
+
+test('setReportDir: throws on an existing but unparseable json fence (surface, not mask)', () => {
+  const v = tmpVault({ 'Tag Manage Config.md': '# cfg\n\n```json\n{ not valid json }\n```\n' });
+  assert.throws(() => setReportDir(v, 'Meta/TM'), /unparseable/);
+});
