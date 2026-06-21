@@ -1,6 +1,15 @@
 # Roadmap
 
-## v0.1.5 — Cross-platform clone-cluster warning + macOS timezone fix (current)
+## v0.2.0 — tag-manage v2 + first-run report home (current)
+
+> v0.2.0 consolidates the tag-manage v2 milestone and adds the first-run report home. The version number had drifted: the v2 compliance work (Slice 1) and its production-copy UAT fixes both shipped under 0.1.7 without a bump, so existing installs received no update signal. v0.2.0 restores an honest version and bundles the new feature.
+>
+> - **tag-manage v2 (compliance engine).** Convention-compliance scoring, curated brand/compound override dictionaries, a rich vault-written report (before + after-changes), the acronym-preference resolver (`MCP`/`GEO`/`PRD` stay uppercase), report-only invalid tags (no silent destructive removal by default), and case-variant folding. Validated on a 1,290-note production copy.
+> - **First-run report home.** On the first report run, tag-manage detects candidate locations, proposes a smart fresh folder based on your vault's structure, and persists the choice in `Tag Manage Config.md` — so every follow-up report lands in one place. Two coupled fixes ship with it: the report directory is auto-created (no abort on a fresh folder), and `apply` no longer rewrites tags inside report notes ("self-poisoning").
+>
+> Launch-scope feature set (inbox-sort, note-rename, property-enrich, property-describe) unchanged from v0.1.5.
+
+## v0.1.5 — Cross-platform clone-cluster warning + macOS timezone fix (previous)
 
 > v0.1.5 finishes the clone-cluster work that v0.1.4 started. Two changes:
 >

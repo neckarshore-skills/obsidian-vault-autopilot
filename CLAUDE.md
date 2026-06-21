@@ -6,7 +6,7 @@
 
 **Organization:** Neckarshore AI
 **License:** MIT
-**Status:** Public (v0.1.7)
+**Status:** Public (v0.2.0)
 
 ## Plugin Structure
 
