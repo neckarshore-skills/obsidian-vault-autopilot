@@ -142,9 +142,20 @@ Vault-local entries win over the shipped defaults on collision (vault-local `bra
 
 **Config override flag:** `--config FILE` loads a specific file path instead of the auto-discovered `Tag Manage Config.md`. Useful for testing.
 
-### First-run config seeding (agent workflow)
+### First-run report-home gate (agent workflow)
 
-On a first run for a vault that has an existing tag convention but no config note yet, you (the agent) should help the user create `Tag Manage Config.md` seeded with their vault-specific brands and compounds. This is an agent-guided step — the CLI only reads the config note, it does not write one. Identify the personal brands by reviewing the audit's heuristic-flagged recommendations and comparing them against the reference convention list in [`references/tag-convention.md`](../../references/tag-convention.md).
+On a report run where no `reportDir` is resolvable (no `Tag Manage Config.md`, or it has no
+`reportDir`), seed the permanent report home before writing any report:
+
+1. Run `node ".../cli.js" suggest-report-dir <vault>` — it returns ranked candidates as JSON
+   (`recommended` plus `candidates[]` with `relpath`, `reason`, `exists`).
+2. Present the recommended fresh location and the alternatives (including any `exists: true`
+   continuity folder). State that the choice becomes the permanent home for all future reports.
+3. **Gate:** ask the user to confirm or choose a different location. Wait for the answer.
+4. Run `node ".../cli.js" set-report-dir <vault> "<chosen relpath>"` to write `reportDir`
+   into `Tag Manage Config.md` (created if absent; existing brands/compounds preserved).
+5. Proceed with the audit. The report (and every later run's before/after reports) now lands
+   in that one home — the gate never repeats.
 
 ## Report destination
 
