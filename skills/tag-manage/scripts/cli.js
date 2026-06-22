@@ -149,7 +149,7 @@ function runAudit(dir, { date, defaultsPath, configText, reportDirAbs, nameSuffi
   const coveragePct = analysis.totalNotes ? Math.round((analysis.taggedNotes / analysis.totalNotes) * 100) : 0;
   const singletonRatioPct = inventory.length ? Math.round((analysis.singletons.length / inventory.length) * 100) : 0;
   const report = renderReport({ scope: 'Vault-wide', date, analysis, findings,
-    recommendations, healthScore: { conformityPct, coveragePct, singletonRatioPct } });
+    recommendations, nestRecommendations, healthScore: { conformityPct, coveragePct, singletonRatioPct } });
   let reportPath = null;
   if (reportDirAbs) {
     fs.mkdirSync(reportDirAbs, { recursive: true });

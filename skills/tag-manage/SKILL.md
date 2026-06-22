@@ -174,6 +174,8 @@ node ".../cli.js" set-hierarchy <vault> --parent Investing --children DayTrading
 
 This writes/merges the cluster into the `hierarchy` block of `Tag Manage Config.md` (created if absent; `brands`/`compounds`/`reportDir` preserved). It **refuses** (non-zero exit, nothing written) an invalid cluster — a child with a space, a child already declared under a different parent, or a cycle. Children are unioned into an existing parent (case-insensitive match) and deduped.
 
+The **declared child string sets the leaf casing verbatim** — declare `DayTrading`, not `daytrading`, because the engine writes the path you declared (`Investing/DayTrading`); it does not re-case the leaf. A flat occurrence in any casing (`daytrading`, `DayTrading`) still matches the declared child and nests to the one canonical path.
+
 **Surface the nest recommendations:** a normal `audit` run (with a `hierarchy` configured) computes them and:
 
 - prints them after the report (`[id] from -> Parent/Child (N notes)`) plus any hierarchy config errors (never swallowed), and
