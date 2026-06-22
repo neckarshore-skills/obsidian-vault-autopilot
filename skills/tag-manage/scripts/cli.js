@@ -158,8 +158,13 @@ function runAudit(dir, { date, defaultsPath, configText, reportDirAbs, nameSuffi
     fs.writeFileSync(path.join(reportDirAbs, `.tag-manage-recommendations.json`), JSON.stringify(recommendations, null, 2), 'utf8');
     // Separate nest file (dot-prefixed -> never scanned: not .md, not walked).
     // Applied via the existing `--from-recs <nest file> --ids ...` path; no new write code.
-    if (nestRecommendations.length) {
-      fs.writeFileSync(path.join(reportDirAbs, `.tag-manage-nest.json`), JSON.stringify(nestRecommendations, null, 2), 'utf8');
+    // Write when there are recs, OR when a sidecar already exists -> a converged re-audit
+    // (0 recs) clears the stale file to [] instead of leaving old recs that diverge from the
+    // report (F-NEST-1). A vault that never had a hierarchy still gets no sidecar (no file,
+    // no recs -> skip), mirroring the unconditional `.tag-manage-recommendations.json` write.
+    const nestPath = path.join(reportDirAbs, `.tag-manage-nest.json`);
+    if (nestRecommendations.length || fs.existsSync(nestPath)) {
+      fs.writeFileSync(nestPath, JSON.stringify(nestRecommendations, null, 2), 'utf8');
     }
   }
   return { report, recommendations, reportPath, nestRecommendations, hierarchyErrors };
