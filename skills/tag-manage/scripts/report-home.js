@@ -5,6 +5,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { extractJsonFence } = require('./config.js');
+const { upsertHierarchyCluster } = require('./hierarchy.js');
 
 const SKIP = (name) => name.startsWith('.') || name.startsWith('_') || name === 'node_modules';
 const ADMIN_RE = /(^|[^a-z])(meta|system|admin)([^a-z]|$)/i;
@@ -58,30 +59,51 @@ function findConfigNote(vault, base = '') {
   return null;
 }
 
-function setReportDir(vault, relpathRaw) {
-  const relpath = validateRelpath(relpathRaw);
+// Shared config-note persistence: find the note, update its json fence in place (or create
+// the note when absent). `mutate(cfg)` edits the parsed config BEFORE any write — so a
+// throwing mutate (e.g. an invalid hierarchy cluster) aborts cleanly, nothing written.
+// `createTemplate(cfg)` renders the new note. Extracted from setReportDir so set-hierarchy
+// reuses the exact fence/create/preserve behavior (the $-substitution and unparseable-fence
+// guards are now one implementation, not two).
+function updateConfigNote(vault, mutate, createTemplate) {
   const existingRel = findConfigNote(vault);
   if (existingRel) {
     const full = path.join(vault, existingRel);
     const text = fs.readFileSync(full, 'utf8');
-    const cfg = extractJsonFence(text) || {};
-    cfg.reportDir = relpath;
-    const fence = '```json\n' + JSON.stringify(cfg, null, 2) + '\n```';
     const hasFence = /```json\s*\n[\s\S]*?\n```/.test(text);
     const parseable = extractJsonFence(text) != null;
     if (hasFence && !parseable) {
-      throw new Error(`existing ${existingRel} has an unparseable json fence — fix it manually before setting reportDir`);
+      throw new Error(`existing ${existingRel} has an unparseable json fence — fix it manually before writing`);
     }
+    const cfg = extractJsonFence(text) || {};
+    mutate(cfg);
+    const fence = '```json\n' + JSON.stringify(cfg, null, 2) + '\n```';
     const updated = parseable
       ? text.replace(/```json\s*\n[\s\S]*?\n```/, () => fence)  // function repl: no $-substitution
       : `${text.replace(/\s*$/, '')}\n\n${fence}\n`;
     fs.writeFileSync(full, updated, 'utf8');
     return { configPath: full, created: false };
   }
+  const cfg = {};
+  mutate(cfg);
   const full = path.join(vault, 'Tag Manage Config.md');
-  const content = `# Tag Manage Config\n\nVault-local config for the tag-manage skill. \`reportDir\` is the permanent home for tag analysis reports.\n\n\`\`\`json\n${JSON.stringify({ reportDir: relpath }, null, 2)}\n\`\`\`\n`;
-  fs.writeFileSync(full, content, 'utf8');
+  fs.writeFileSync(full, createTemplate(cfg), 'utf8');
   return { configPath: full, created: true };
 }
 
-module.exports = { suggestReportDir, setReportDir };
+function setReportDir(vault, relpathRaw) {
+  const relpath = validateRelpath(relpathRaw);
+  return updateConfigNote(vault,
+    (cfg) => { cfg.reportDir = relpath; },
+    (cfg) => `# Tag Manage Config\n\nVault-local config for the tag-manage skill. \`reportDir\` is the permanent home for tag analysis reports.\n\n\`\`\`json\n${JSON.stringify(cfg, null, 2)}\n\`\`\`\n`);
+}
+
+// Persist one approved parent -> children cluster into the `hierarchy` block. The validated
+// merge (upsertHierarchyCluster) throws on an invalid cluster, so nothing is written.
+function setHierarchy(vault, parent, children) {
+  return updateConfigNote(vault,
+    (cfg) => { cfg.hierarchy = upsertHierarchyCluster(cfg, parent, children).hierarchy; },
+    (cfg) => `# Tag Manage Config\n\nVault-local config for the tag-manage skill. \`hierarchy\` declares parent -> child tag clusters; a flat child tag is promoted to \`Parent/Child\` via the nest recommendation.\n\n\`\`\`json\n${JSON.stringify(cfg, null, 2)}\n\`\`\`\n`);
+}
+
+module.exports = { suggestReportDir, setReportDir, setHierarchy };

@@ -305,3 +305,51 @@ test('CLI apply --from-recs --report-dir: writes after-changes report to report 
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
+
+// --- Phase 1 NEST integration: runAudit emits nest recs to a SEPARATE file ----
+const DEFAULTS = path.join(__dirname, '..', 'references', 'tag-overrides.default.json');
+const cfgWithHierarchy = (h) => '# Tag Manage Config\n\n```json\n' + JSON.stringify({ hierarchy: h }, null, 2) + '\n```\n';
+
+test('runAudit: a configured hierarchy yields nest recommendations, kept OUT of the default cleanup recs', () => {
+  const dir = tmpVault({ 'a.md': '---\ntags:\n  - daytrading\n---\n#daytrading body\n' });
+  const reportDirAbs = path.join(dir, 'Meta', 'Tag Management');
+  const out = runAudit(dir, { date: '2026-06-22', defaultsPath: DEFAULTS,
+    configText: cfgWithHierarchy({ Investing: ['DayTrading'] }), reportDirAbs });
+  assert.equal(out.nestRecommendations.length, 1);
+  assert.equal(out.nestRecommendations[0].to, 'Investing/DayTrading');
+  assert.equal(out.recommendations.some((r) => r.kind === 'nest'), false,
+    'nest recs must NOT be bundled into the default cleanup recommendations');
+});
+
+test('runAudit: nest recs are written to a separate .tag-manage-nest.json (clean recs file stays nest-free)', () => {
+  const dir = tmpVault({ 'a.md': '---\ntags:\n  - daytrading\n---\n' });
+  const reportDirAbs = path.join(dir, 'Meta', 'Tag Management');
+  runAudit(dir, { date: '2026-06-22', defaultsPath: DEFAULTS,
+    configText: cfgWithHierarchy({ Investing: ['DayTrading'] }), reportDirAbs });
+  const nest = JSON.parse(fs.readFileSync(path.join(reportDirAbs, '.tag-manage-nest.json'), 'utf8'));
+  assert.equal(nest[0].to, 'Investing/DayTrading');
+  const clean = JSON.parse(fs.readFileSync(path.join(reportDirAbs, '.tag-manage-recommendations.json'), 'utf8'));
+  assert.equal(clean.some((r) => r.kind === 'nest'), false);
+});
+
+test('runAudit: no hierarchy configured -> no nest file, empty nestRecommendations', () => {
+  const dir = tmpVault({ 'a.md': '---\ntags:\n  - daytrading\n---\n' });
+  const reportDirAbs = path.join(dir, 'Meta', 'Tag Management');
+  const out = runAudit(dir, { date: '2026-06-22', defaultsPath: DEFAULTS, configText: null, reportDirAbs });
+  assert.deepEqual(out.nestRecommendations, []);
+  assert.equal(fs.existsSync(path.join(reportDirAbs, '.tag-manage-nest.json')), false);
+});
+
+test('NEST end-to-end: the written nest file applies through the existing selectOps/applyToVault path', () => {
+  const dir = tmpVault({ 'a.md': '---\ntags:\n  - daytrading\n---\nSee #daytrading.\n' });
+  const reportDirAbs = path.join(dir, 'Meta', 'Tag Management');
+  runAudit(dir, { date: '2026-06-22', defaultsPath: DEFAULTS,
+    configText: cfgWithHierarchy({ Investing: ['DayTrading'] }), reportDirAbs });
+  const nestRecs = JSON.parse(fs.readFileSync(path.join(reportDirAbs, '.tag-manage-nest.json'), 'utf8'));
+  const ops = selectOps(nestRecs, 'all');
+  applyToVault(dir, ops, { write: true, reportDirAbs });
+  const after = fs.readFileSync(path.join(dir, 'a.md'), 'utf8');
+  assert.match(after, /- Investing\/DayTrading/);
+  assert.match(after, /#Investing\/DayTrading/);
+  assert.doesNotMatch(after, /#daytrading\b/);
+});

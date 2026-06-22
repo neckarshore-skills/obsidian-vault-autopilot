@@ -20,7 +20,9 @@ function mergeOverrides(defaults, local) {
   const brands = toMap(d.brands); for (const [k, v] of toMap(l.brands)) brands.set(k, v);
   const compounds = toMap(d.compounds); for (const [k, v] of toMap(l.compounds)) compounds.set(k, v);
   const brandHyphenSet = new Set([...brands.keys()].filter((k) => k.includes('-')));
-  return { brands, compounds, brandHyphenSet, folderExclusive: l.folderExclusive || {}, reportDir: l.reportDir || null };
+  // hierarchy is vault-local only (defaults ship none). Carried through raw (parent ->
+  // children); hierarchy.js derives + validates the childKey map at use time.
+  return { brands, compounds, brandHyphenSet, folderExclusive: l.folderExclusive || {}, reportDir: l.reportDir || null, hierarchy: l.hierarchy || {} };
 }
 
 function loadConfig({ defaultsPath, configText }) {

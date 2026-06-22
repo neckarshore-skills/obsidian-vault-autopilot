@@ -14,9 +14,10 @@ const { applyOps, auditFindings, buildInventory, frontmatterTags } = require('./
 const { analyze } = require('./analysis.js');
 const { classifyTag } = require('./convention.js');
 const { buildRecommendations, buildContext } = require('./recommend.js');
+const { parseHierarchy, buildNestRecommendations } = require('./hierarchy.js');
 const { renderReport, REPORT_MARKER_TAG } = require('./report.js');
 const { loadConfig, extractJsonFence } = require('./config.js');
-const { suggestReportDir, setReportDir } = require('./report-home.js');
+const { suggestReportDir, setReportDir, setHierarchy } = require('./report-home.js');
 
 // Default mass-change ceiling: a single op touching more notes than this aborts.
 const DEFAULT_MASS_CHANGE_THRESHOLD = 50;
@@ -137,21 +138,31 @@ function runAudit(dir, { date, defaultsPath, configText, reportDirAbs, nameSuffi
   const findings = auditFindings(notes);
   const analysis = analyze(notes, inventory);
   const recommendations = buildRecommendations(inventory, dict, notes);
+  // NEST (Phase 1): declared-hierarchy promotions, computed from the parsed config.
+  // Kept in a SEPARATE list + file so the default cleanup ("apply all" of the recs
+  // file) never silently re-homes tags; nest is opt-in via --from-recs the nest file.
+  const { map: hierMap, errors: hierarchyErrors } = parseHierarchy(dict.hierarchy);
+  const nestRecommendations = buildNestRecommendations(inventory, hierMap, notes);
   const ctx = buildContext(inventory, dict);
   const violators = inventory.filter((r) => classifyTag(r.display, ctx).violation).length;
   const conformityPct = inventory.length ? Math.round(((inventory.length - violators) / inventory.length) * 100) : 100;
   const coveragePct = analysis.totalNotes ? Math.round((analysis.taggedNotes / analysis.totalNotes) * 100) : 0;
   const singletonRatioPct = inventory.length ? Math.round((analysis.singletons.length / inventory.length) * 100) : 0;
   const report = renderReport({ scope: 'Vault-wide', date, analysis, findings,
-    recommendations, healthScore: { conformityPct, coveragePct, singletonRatioPct } });
+    recommendations, nestRecommendations, healthScore: { conformityPct, coveragePct, singletonRatioPct } });
   let reportPath = null;
   if (reportDirAbs) {
     fs.mkdirSync(reportDirAbs, { recursive: true });
     reportPath = path.join(reportDirAbs, `${date} Tag Analysis Report - Vault-wide${nameSuffix}.md`);
     fs.writeFileSync(reportPath, report, 'utf8');
     fs.writeFileSync(path.join(reportDirAbs, `.tag-manage-recommendations.json`), JSON.stringify(recommendations, null, 2), 'utf8');
+    // Separate nest file (dot-prefixed -> never scanned: not .md, not walked).
+    // Applied via the existing `--from-recs <nest file> --ids ...` path; no new write code.
+    if (nestRecommendations.length) {
+      fs.writeFileSync(path.join(reportDirAbs, `.tag-manage-nest.json`), JSON.stringify(nestRecommendations, null, 2), 'utf8');
+    }
   }
-  return { report, recommendations, reportPath };
+  return { report, recommendations, reportPath, nestRecommendations, hierarchyErrors };
 }
 
 function selectOps(recommendations, selection) {
@@ -220,7 +231,7 @@ function resolveReportContext(target, rest) {
 if (require.main === module) {
   const [cmd, ...rest] = process.argv.slice(2);
   // Flags whose value argument must not be mistaken for the vault target.
-  const flagsWithValues = new Set(['--ops', '--max', '--from-recs', '--ids', '--report-dir', '--config', '--date']);
+  const flagsWithValues = new Set(['--ops', '--max', '--from-recs', '--ids', '--report-dir', '--config', '--date', '--parent', '--children']);
   const target = rest.find((a) => !a.startsWith('--') && !flagsWithValues.has(rest[rest.indexOf(a) - 1]));
   const positionals = rest.filter((a, i) => !a.startsWith('--') && !flagsWithValues.has(rest[i - 1]));
   try {
@@ -236,12 +247,31 @@ if (require.main === module) {
       console.error(`${r.created ? 'Created' : 'Updated'} ${r.configPath}`);
       process.exit(0);
     }
+    if (cmd === 'set-hierarchy') {
+      const parent = getFlagValue(rest, '--parent');
+      const childrenRaw = getFlagValue(rest, '--children');
+      if (!target || !parent || !childrenRaw) {
+        throw Object.assign(new Error('usage: cli.js set-hierarchy <vault> --parent <Parent> --children <Child1,Child2,...>'), { usage: true });
+      }
+      const children = childrenRaw.split(',').map((s) => s.trim()).filter(Boolean);
+      const r = setHierarchy(target, parent, children);
+      console.error(`${r.created ? 'Created' : 'Updated'} ${r.configPath} — ${parent}: ${children.join(', ')}`);
+      process.exit(0);
+    }
     if (cmd === 'audit') {
       if (!target) throw Object.assign(new Error('usage: cli.js audit <vault> [--report-dir DIR] [--config FILE] [--date YYYY-MM-DD]'), { usage: true });
       const { defaultsPath, configText, reportDirAbs, date } = resolveReportContext(target, rest);
       const out = runAudit(target, { date, defaultsPath, configText, reportDirAbs });
       console.log(out.report);
       if (out.reportPath) console.error(`Report written to ${out.reportPath}`);
+      // Report hierarchy config errors (never swallow them) — invalid entries were excluded.
+      for (const e of out.hierarchyErrors || []) console.error(`hierarchy config: ${e}`);
+      // Make the opt-in nest path discoverable; nest is NOT part of "apply all".
+      if (out.nestRecommendations && out.nestRecommendations.length) {
+        console.error(`\n${out.nestRecommendations.length} nest recommendation(s) (declared hierarchy). Review, then apply opt-in:`);
+        for (const r of out.nestRecommendations) console.error(`  [${r.id}] ${r.from} -> ${r.to} (${r.notesAffected} notes)`);
+        if (reportDirAbs) console.error(`  apply: cli.js plan <vault> --from-recs "${path.join(reportDirAbs, '.tag-manage-nest.json')}" --ids <ids>`);
+      }
       process.exit(0);
     }
     if (cmd === 'plan' || cmd === 'apply') {

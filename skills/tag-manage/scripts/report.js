@@ -95,7 +95,7 @@ function renderFindings(f, a) {
   return parts.join('\n');
 }
 
-function renderReport({ scope, date, analysis: a, findings: f, recommendations: recs, healthScore: h }) {
+function renderReport({ scope, date, analysis: a, findings: f, recommendations: recs, healthScore: h, nestRecommendations: nest = [] }) {
   const lines = [];
   lines.push(`---\ntitle: 'Tag Analysis Report - ${scope} - ${date}'\ntype: inbox\nstatus: draft\ncreated: ${date}\ntags:\n  - ${REPORT_MARKER_TAG}\n---\n`);
   lines.push(`# Tag Analysis Report\n`);
@@ -109,6 +109,19 @@ function renderReport({ scope, date, analysis: a, findings: f, recommendations: 
   lines.push(`## Recommendations\n\n` + (recs.length ? table(['#', 'Action', 'From', 'To', 'Notes', 'Note'], recs.map((r) => [
     r.id, `${r.kind} (${r.severity})`, `\`${r.from}\``, `\`${r.to}\``, r.notesAffected, r.source === 'heuristic' ? 'verify casing (not in dictionary)' : r.source,
   ])) : '_No recommendations._') + '\n');
+  // Tag Hierarchy (nest) — declared-hierarchy promotions. Rendered only when present, in
+  // its OWN section so it is visible in the browsable report (the skill's contract: the
+  // report is how the user knows what is possible) while staying out of the cleanup
+  // Recommendations table + the default "apply all". from/to are backtick-wrapped (no bare
+  // #token -> linter-inert, same invariant as the Next Steps fix, OBI-2026-06-21-2).
+  if (nest.length) {
+    lines.push(`## Tag Hierarchy (nest - opt-in)\n\n`
+      + 'These promote a flat tag to a nested `Parent/Child`. They are **not** part of "apply all" — '
+      + 'a nest changes tag identity across many notes, so apply each by id from the separate nest file.\n\n'
+      + table(['#', 'From', 'To', 'Notes'], nest.map((r) => [
+        r.id, `\`${r.from}\``, `\`${r.to}\``, r.notesAffected,
+      ])) + '\n');
+  }
   // No `#`-prefixed example tokens: obsidian-linter (move-tags-to-yaml) would promote
   // a `#1`-style token from this prose into the report's own frontmatter as a tag,
   // corrupting it on every save (OBI-2026-06-21-2). Plain numbers are linter-inert.

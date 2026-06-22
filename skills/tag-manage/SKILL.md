@@ -1,14 +1,14 @@
 ---
 name: tag-manage
 status: beta
-description: Use when an Obsidian vault needs tag auditing, convention-compliance checking, or cleanup of EXISTING tags — finding duplicates, case inconsistencies, orphan tags, separator variants, or convention violations, then renaming, merging, or removing tags behind a preview-and-confirm gate. Trigger phrases - "audit tags", "analyze tags", "fix tags", "tag cleanup", "find duplicate tags", "merge tags", "rename tag", "unused tags", "orphan tags", "tag consistency", "check tag convention", "tag compliance". Also trigger when the user mentions inconsistent tag casing, separator variants, numeric tag artifacts, or wants a tag health report. Does NOT invent new tags from note content (that is a later version).
+description: Use when an Obsidian vault needs tag auditing, convention-compliance checking, or cleanup of EXISTING tags — finding duplicates, case inconsistencies, orphan tags, separator variants, or convention violations, then renaming, merging, or removing tags behind a preview-and-confirm gate. Also nests flat tags under a declared parent (e.g. DayTrading -> Investing/DayTrading) via the hierarchy config. Trigger phrases - "audit tags", "analyze tags", "fix tags", "tag cleanup", "find duplicate tags", "merge tags", "rename tag", "unused tags", "orphan tags", "tag consistency", "check tag convention", "tag compliance", "nest tags", "tag hierarchy", "organize tags into a hierarchy", "group flat tags under a parent". Also trigger when the user mentions inconsistent tag casing, separator variants, numeric tag artifacts, or wants a tag health report. Does NOT invent new tags from note content, nor infer clusters from note content (both are a later, separate skill).
 ---
 
 # Tag Manage
 
 Audit a vault's existing tags, score them against the PascalCase convention, and apply guided cleanup: rename, merge, remove orphans, fix convention violations. **Cleanup normalizes and consolidates tags that already exist — it never invents new ones** (content-based auto-tagging is a later version, out of scope here).
 
-The engine is a set of deterministic Node scripts (`scripts/tags.js`, `scripts/cli.js`, `scripts/convention.js`, `scripts/config.js`, `scripts/recommend.js`, `scripts/report.js`). Determinism is the safety guarantee — never hand-edit notes to "clean tags." The AI reviews the report and runs the confirm gate; the scripts do every byte-level rewrite.
+The engine is a set of deterministic Node scripts (`scripts/tags.js`, `scripts/cli.js`, `scripts/convention.js`, `scripts/config.js`, `scripts/recommend.js`, `scripts/hierarchy.js`, `scripts/report.js`). Determinism is the safety guarantee — never hand-edit notes to "clean tags." The AI reviews the report and runs the confirm gate; the scripts do every byte-level rewrite.
 
 > **Read first:** [`references/tag-semantics.md`](../../references/tag-semantics.md) (Step 0 finding —
 > Obsidian matches tags case-insensitively, which is why case-fixes are cosmetic and a different op
@@ -128,7 +128,11 @@ The config note must contain a `json` fenced code block:
   "compounds": {
     "myvaultterm": "MyVaultTerm"
   },
-  "reportDir": "Meta/Tag Management"
+  "reportDir": "Meta/Tag Management",
+  "hierarchy": {
+    "Investing": ["DayTrading", "SwingTrading", "LongTermInvesting"],
+    "AI": ["AIAgent", "GenerativeAI", "PromptInjection"]
+  }
 }
 ```
 
@@ -137,6 +141,7 @@ Fields:
 - `brands` — vault-specific brand names and abbreviations. Keys are case-insensitive (matched via logical key). Values are the canonical spellings to enforce.
 - `compounds` — vault-specific multi-word or hyphenated terms. Keys are the "stripped" or common variants; values are the canonical spellings.
 - `reportDir` — path relative to the vault root where audit reports and the recommendations JSON are written. Without this field (or `--report-dir`), the audit writes no file and prints to stdout only.
+- `hierarchy` — declared parent → children clusters (see Tag hierarchy below). A flat tag matching a declared child is offered a `nest` recommendation promoting it to `Parent/Child`. Authored most easily via the `set-hierarchy` command; vault-local only (no shipped defaults).
 
 Vault-local entries win over the shipped defaults on collision (vault-local `brands.github` overrides the default). The merge is additive: vault-local and shipped entries coexist.
 
@@ -156,6 +161,38 @@ On a report run where no `reportDir` is resolvable (no `Tag Manage Config.md`, o
    into `Tag Manage Config.md` (created if absent; existing brands/compounds preserved).
 5. Proceed with the audit. The report (and every later run's before/after reports) now lands
    in that one home — the gate never repeats.
+
+## Tag hierarchy (nest)
+
+Beyond cleanup, the skill can promote a **flat** tag to a **nested** one under a declared parent — `#daytrading` → `#Investing/DayTrading`. This is the deterministic Phase 1 of the hierarchy layer: you (or the user) declare the clusters; the engine applies them safely. It does **not** infer clusters from note content — that is a separate, later skill.
+
+**Declare a cluster** (deterministic config writer, no LLM):
+
+```bash
+node ".../cli.js" set-hierarchy <vault> --parent Investing --children DayTrading,SwingTrading,LongTermInvesting
+```
+
+This writes/merges the cluster into the `hierarchy` block of `Tag Manage Config.md` (created if absent; `brands`/`compounds`/`reportDir` preserved). It **refuses** (non-zero exit, nothing written) an invalid cluster — a child with a space, a child already declared under a different parent, or a cycle. Children are unioned into an existing parent (case-insensitive match) and deduped.
+
+The **declared child string sets the leaf casing verbatim** — declare `DayTrading`, not `daytrading`, because the engine writes the path you declared (`Investing/DayTrading`); it does not re-case the leaf. A flat occurrence in any casing (`daytrading`, `DayTrading`) still matches the declared child and nests to the one canonical path.
+
+**Surface the nest recommendations:** a normal `audit` run (with a `hierarchy` configured) computes them and:
+
+- prints them after the report (`[id] from -> Parent/Child (N notes)`) plus any hierarchy config errors (never swallowed), and
+- writes them to a **separate** `.tag-manage-nest.json` sidecar in the report directory.
+
+Nest recs are deliberately kept **out** of `.tag-manage-recommendations.json` and out of the default "apply all" cleanup — a nest changes tag identity across potentially many notes, so it is **opt-in per id**.
+
+**Apply a nest** through the normal Stage-2 path (no new flags) — point `--from-recs` at the nest sidecar:
+
+```bash
+node ".../cli.js" plan  <vault> --from-recs .tag-manage-nest.json --ids 1,2          # dry-run preview
+node ".../cli.js" apply <vault> --from-recs .tag-manage-nest.json --ids 1,2 --write   # after confirm
+```
+
+A nest is a rename onto a slash path, so it rides the same `applyOps` + survival + mass-change guards and the same confirm gate as every other op. It **converges**: once `#Investing/DayTrading` exists, a re-audit proposes no further nest for it.
+
+> **Phase boundary (design note).** Phase 1 is this deterministic declared-hierarchy nesting. The AI-driven version — the model reads note *content* and proposes clusters — is **Phase 2**, a separate future skill (`tag-organize`), with its own content-read gate. A name-only guesser was deliberately dropped (Phase 2 supersedes it). See `docs/superpowers/specs/2026-06-22-tag-manage-hierarchy-design.md`.
 
 ## Report destination
 
@@ -189,7 +226,7 @@ A `#tag`-looking token is left **byte-for-byte untouched** when it sits inside: 
 ## Known limitations
 
 - **No per-note skill-log callout.** Unlike note-rename, this skill does not stamp a `VaultAutopilot` callout onto every touched note. Rationale: a bulk tag op can touch hundreds of notes; stamping each one is a large incidental change beyond the requested rewrite and breaks idempotency. Run-level traceability lives in the vault report and `logs/run-history.md`. Per-note skill-log is a tracked follow-up.
-- **No content-based auto-tagging** (scope C — a later version).
+- **No content-based auto-tagging, and no content-inferred hierarchy.** Both are Phase 2 (`tag-organize`, a separate later skill with its own content-read gate). The hierarchy this skill applies is *declared* in config (`set-hierarchy`), never inferred from note bodies.
 - **Dataview `tags::` fields are not first-class.** The engine correctly ignores `tags::` lines in frontmatter (the negative lookahead `(?!:)` in the field regex excludes Dataview field syntax so they are never mis-parsed as tag fields). However, Dataview inline field tags are not read, not counted in the inventory, and not rewritten. A note that uses only `tags:: value` (no YAML frontmatter) will appear untagged in the audit.
 - **`notesAffected` is a slight upper bound for merges.** The recommendations engine counts the logical tag's total note occurrences. For a merge where some notes already carry the canonical spelling, the actual changed-note count will be lower. The mass-change guard uses the real `applyOps` result (exact count), so safety is not affected — only the report number is an upper bound.
 - **Near-duplicate detection is deterministic for case + separator only.** Singular/plural, abbreviations, and synonyms are not auto-detected. They can be added to the vault-local config as brand or compound entries, after which the engine will enforce them.

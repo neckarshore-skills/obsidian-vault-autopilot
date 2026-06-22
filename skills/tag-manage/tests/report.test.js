@@ -135,3 +135,32 @@ test('v2(e): large integer counts render with thousand separators', () => {
   assert.doesNotMatch(md, /\b1272\b/, 'raw un-separated 1272 must not appear');
   assert.equal(md, renderReport(big)); // still deterministic
 });
+
+// --- Tag hierarchy (nest) section: nest recs must be visible in the browsable report ---
+
+const nestData = {
+  ...data,
+  nestRecommendations: [
+    { id: 1, kind: 'nest', severity: 'LOW', from: 'daytrading', to: 'Investing/DayTrading', notesAffected: 3, source: 'hierarchy', ops: [] },
+  ],
+};
+
+test('renderReport: nest recommendations appear in their own section, flagged opt-in', () => {
+  const md = renderReport(nestData);
+  assert.match(md, /Tag Hierarchy/i, 'a dedicated hierarchy/nest section');
+  assert.match(md, /Investing\/DayTrading/, 'the proposed nested path is shown');
+  assert.match(md, /opt-in|not part of|separate/i, 'flagged as not part of the default apply-all');
+});
+
+test('renderReport: no hierarchy configured (no nest recs) -> no nest section clutter', () => {
+  const md = renderReport(data); // data has no nestRecommendations
+  assert.doesNotMatch(md, /Tag Hierarchy/i);
+});
+
+test('renderReport: nest section is linter-safe — no bare #token (self-poisoning guard)', () => {
+  const md = renderReport(nestData);
+  // the same invariant the Next Steps callout fix pinned: nothing that obsidian-linter
+  // would promote into frontmatter as a tag.
+  const nestSection = md.slice(md.search(/Tag Hierarchy/i));
+  assert.doesNotMatch(nestSection, /(^|\s)#[\p{L}\p{N}][\p{L}\p{N}/_-]*/u, 'no bare #tag-shaped token in the nest section');
+});
