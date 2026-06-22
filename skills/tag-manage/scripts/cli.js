@@ -14,6 +14,7 @@ const { applyOps, auditFindings, buildInventory, frontmatterTags } = require('./
 const { analyze } = require('./analysis.js');
 const { classifyTag } = require('./convention.js');
 const { buildRecommendations, buildContext } = require('./recommend.js');
+const { parseHierarchy, buildNestRecommendations } = require('./hierarchy.js');
 const { renderReport, REPORT_MARKER_TAG } = require('./report.js');
 const { loadConfig, extractJsonFence } = require('./config.js');
 const { suggestReportDir, setReportDir } = require('./report-home.js');
@@ -137,6 +138,11 @@ function runAudit(dir, { date, defaultsPath, configText, reportDirAbs, nameSuffi
   const findings = auditFindings(notes);
   const analysis = analyze(notes, inventory);
   const recommendations = buildRecommendations(inventory, dict, notes);
+  // NEST (Phase 1): declared-hierarchy promotions, computed from the parsed config.
+  // Kept in a SEPARATE list + file so the default cleanup ("apply all" of the recs
+  // file) never silently re-homes tags; nest is opt-in via --from-recs the nest file.
+  const { map: hierMap, errors: hierarchyErrors } = parseHierarchy(dict.hierarchy);
+  const nestRecommendations = buildNestRecommendations(inventory, hierMap, notes);
   const ctx = buildContext(inventory, dict);
   const violators = inventory.filter((r) => classifyTag(r.display, ctx).violation).length;
   const conformityPct = inventory.length ? Math.round(((inventory.length - violators) / inventory.length) * 100) : 100;
@@ -150,8 +156,13 @@ function runAudit(dir, { date, defaultsPath, configText, reportDirAbs, nameSuffi
     reportPath = path.join(reportDirAbs, `${date} Tag Analysis Report - Vault-wide${nameSuffix}.md`);
     fs.writeFileSync(reportPath, report, 'utf8');
     fs.writeFileSync(path.join(reportDirAbs, `.tag-manage-recommendations.json`), JSON.stringify(recommendations, null, 2), 'utf8');
+    // Separate nest file (dot-prefixed -> never scanned: not .md, not walked).
+    // Applied via the existing `--from-recs <nest file> --ids ...` path; no new write code.
+    if (nestRecommendations.length) {
+      fs.writeFileSync(path.join(reportDirAbs, `.tag-manage-nest.json`), JSON.stringify(nestRecommendations, null, 2), 'utf8');
+    }
   }
-  return { report, recommendations, reportPath };
+  return { report, recommendations, reportPath, nestRecommendations, hierarchyErrors };
 }
 
 function selectOps(recommendations, selection) {
@@ -242,6 +253,14 @@ if (require.main === module) {
       const out = runAudit(target, { date, defaultsPath, configText, reportDirAbs });
       console.log(out.report);
       if (out.reportPath) console.error(`Report written to ${out.reportPath}`);
+      // Report hierarchy config errors (never swallow them) — invalid entries were excluded.
+      for (const e of out.hierarchyErrors || []) console.error(`hierarchy config: ${e}`);
+      // Make the opt-in nest path discoverable; nest is NOT part of "apply all".
+      if (out.nestRecommendations && out.nestRecommendations.length) {
+        console.error(`\n${out.nestRecommendations.length} nest recommendation(s) (declared hierarchy). Review, then apply opt-in:`);
+        for (const r of out.nestRecommendations) console.error(`  [${r.id}] ${r.from} -> ${r.to} (${r.notesAffected} notes)`);
+        if (reportDirAbs) console.error(`  apply: cli.js plan <vault> --from-recs "${path.join(reportDirAbs, '.tag-manage-nest.json')}" --ids <ids>`);
+      }
       process.exit(0);
     }
     if (cmd === 'plan' || cmd === 'apply') {

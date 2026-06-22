@@ -18,3 +18,10 @@ test('loadConfig with no vault config falls back to defaults only', () => {
   assert.equal(m.brands.get('github'), 'GitHub');
   assert.equal(m.reportDir, null);
 });
+test('mergeOverrides carries the vault-local hierarchy block through (defaults ship none)', () => {
+  const m = mergeOverrides({ brands: { github: 'GitHub' } }, { hierarchy: { Investing: ['DayTrading'] } });
+  assert.deepEqual(m.hierarchy, { Investing: ['DayTrading'] });
+});
+test('mergeOverrides: no hierarchy declared -> empty object (never undefined)', () => {
+  assert.deepEqual(mergeOverrides({}, {}).hierarchy, {});
+});
