@@ -3,8 +3,18 @@
 - **Date:** 2026-06-22
 - **Author:** Obi (Skill Master)
 - **Skill:** `tag-manage` (Obsidian Vault Autopilot)
-- **Status:** Design approved in shape (brainstorm); v1 scope locked, v2 named-deferred
+- **Status:** Build order locked (user, 2026-06-22) — Phase 1 (deterministic nest mechanics) builds now; Phase 2 (content-based suggestion) is the committed next build; the name-based suggester is **dropped**.
 - **Supersedes:** the "Handover: Tag Manager — Intelligent Restructure Layer" note (v1.0, two parallel chat sessions) — treated as design *input*, not ground truth (see Provenance)
+
+## Decision (2026-06-22, user)
+
+Build order locked: **build the deterministic nest mechanics first; content-based suggestion is the committed next phase.**
+
+- **Build now (Phase 1 = "v1" below):** the `hierarchy` config block, the `nest` recommendation class, the `set-hierarchy` CLI, and the deterministic tests — on synthetic fixtures (no production-vault access required to build).
+- **Dropped:** the name-based cluster suggester. It was a throwaway half-step — Phase 2's content-based suggestion supersedes it, so we skip it rather than build-then-replace.
+- **Committed next (Phase 2 = "v2" below) — its OWN skill:** content-sampled suggestion (the LLM reads note bodies to propose clusters), behind its own production-read gate. This is where the skill **splits in two**: Phase 2 becomes a separate skill `tag-organize` (the user's "Tag Optimierung") — the home of the AI-driven restructure. The concrete clusters for the user's vault are defined once the in-flight production cleanup exposes the real residual flat tags.
+- **Skill split lands at the Phase 2 boundary, NOT now.** Phase 1 is engine plumbing with no standalone user-facing step (the name-based suggester — its only user step — was just dropped). A Phase-1-only second skill would be hollow at birth: nobody hand-authors a taxonomy config. So Phase 1 is an extended step in the existing `tag-manage` (shared engine); the second skill is born when Phase 2 is built. The two-skill question IS the Phase 2 question.
+- **Label note (this was the confusion):** "v1 / v2" in this document are **build phases of the hierarchy feature** — NOT the shipped `tag-manage` v1/v2 (the audit + compliance cleanup, already merged in #42–#47). Two different axes; the shipped cleanup does rename/merge/remove, the hierarchy feature adds the new `nest` operation.
 
 ## Provenance & how to read this
 
@@ -57,8 +67,8 @@ This two-pass split is not only an LLM-complexity decision (the handover's own c
 | Engine (`convention.js` / `recommend.js`) | Hierarchy = a canonical layer; declared flat child → `nest` recommendation | v1 |
 | Apply / survival (`tags.js`) | **Unchanged** — NEST is a rename onto a slash path, through the existing recs/apply/survival path | v1 |
 | CLI (`cli.js`) | New deterministic `set-hierarchy` command (writes approved clusters into config) | v1 |
-| Agent layer (SKILL.md) | Name-based cluster suggestion step (read-only) → user approval → `set-hierarchy` | v1 |
-| Agent layer (SKILL.md) | Content-sampled rule-aware induction over residuals + advisory notes | v2 |
+| Agent layer (SKILL.md) | ~~Name-based cluster suggestion step~~ — **DROPPED** (Phase 2's content-based suggestion supersedes it) | — |
+| Agent layer (new skill `tag-organize`) | Content-sampled rule-aware induction over residuals + advisory notes | v2 |
 
 ---
 
@@ -109,7 +119,9 @@ node ".../cli.js" set-hierarchy <vault> --parent Investing \
 - Pure file I/O — **no LLM**. Runs the same config validation before writing.
 - This is the only way Pass-2 suggestions become durable, and it requires explicit invocation after user approval.
 
-### Agent layer: name-based suggestion (the v1 slice of B)
+### Agent layer: name-based suggestion (the v1 slice of B) — DROPPED (2026-06-22)
+
+> **Dropped per the 2026-06-22 decision.** Phase 2's content-based suggestion supersedes a names-only guesser; building it now would be throwaway work. Phase 1 ships with **no** agent-layer suggestion step — clusters are authored directly via `set-hierarchy` (config writer) until the `tag-organize` skill (Phase 2) provides the AI suggestion. The flow below is retained for design reference only.
 
 In SKILL.md, after `audit`:
 
@@ -197,14 +209,14 @@ Reading note **bodies** is a new, larger production-vault data-access surface (t
 1. **"Rules are hypotheses, the LLM can CHALLENGE them" → downgraded.** Here, rules are **constraints** for the deterministic pass; the LLM acts only where rules are **silent** (residuals) and never overrides a firing rule. CHALLENGE shrinks to an advisory free-text note.
 2. **Handover "Current State" item 3 ("Tag-Vorschläge") is not the shipped reality.** v0.2.1 SKILL.md explicitly puts content-based suggestion out of scope. The handover is design input, not a current-state description.
 3. **DELETE is not a first-class op** — it collapses into the existing frontmatter-only remove + the fact that zero-note tags aren't inventoried.
-4. **Restructure is an extended step in the existing skill, not a new skill** (handover open question 4).
+4. **Restructure splits across the phase boundary** (handover open question 4, refined 2026-06-22): Phase 1 (deterministic nest mechanics) is an extended step in the existing `tag-manage` — shared engine, no standalone user step. Phase 2 (AI content-based restructure) is its **own skill** `tag-organize`. The split lands when Phase 2 is built, not before.
 
 ## Answers to the handover's open questions (grounded)
 
 1. **Where do the rules live?** `references/tag-convention.md` (human convention + canonical casing) + `references/tag-semantics.md` (Obsidian case-insensitivity) + `scripts/convention.js` (enforced severity rules, first-match-wins) + the dictionaries (`tag-overrides.default.json` + vault-local `Tag Manage Config.md`). Documented, not undocumented. The model gets `tag-convention.md` + config as explicit input.
 2. **Approval UI — per-op or bulk?** Selectable-bulk: the recommendations table + `--ids` ("apply all" / "apply 1, 3" / "skip 2"). Restructure reuses this.
 3. **CHALLENGE — interrupt or separate?** Separate, advisory, never interrupts; in this design reduced to a free-text observations note.
-4. **New skill or extended step?** Extended step in `tag-manage`.
+4. **New skill or extended step?** Both — at different phases. Phase 1 (deterministic nest mechanics): extended step in `tag-manage` (shared engine, no standalone user step). Phase 2 (AI content-based restructure): its own skill `tag-organize` — the user's "Tag Optimierung". Phase 1 alone does not warrant a separate skill (nobody hand-authors a taxonomy config); the split is the Phase 2 question.
 
 ## Risks & mitigations
 
