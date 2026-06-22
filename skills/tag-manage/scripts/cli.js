@@ -17,7 +17,7 @@ const { buildRecommendations, buildContext } = require('./recommend.js');
 const { parseHierarchy, buildNestRecommendations } = require('./hierarchy.js');
 const { renderReport, REPORT_MARKER_TAG } = require('./report.js');
 const { loadConfig, extractJsonFence } = require('./config.js');
-const { suggestReportDir, setReportDir } = require('./report-home.js');
+const { suggestReportDir, setReportDir, setHierarchy } = require('./report-home.js');
 
 // Default mass-change ceiling: a single op touching more notes than this aborts.
 const DEFAULT_MASS_CHANGE_THRESHOLD = 50;
@@ -231,7 +231,7 @@ function resolveReportContext(target, rest) {
 if (require.main === module) {
   const [cmd, ...rest] = process.argv.slice(2);
   // Flags whose value argument must not be mistaken for the vault target.
-  const flagsWithValues = new Set(['--ops', '--max', '--from-recs', '--ids', '--report-dir', '--config', '--date']);
+  const flagsWithValues = new Set(['--ops', '--max', '--from-recs', '--ids', '--report-dir', '--config', '--date', '--parent', '--children']);
   const target = rest.find((a) => !a.startsWith('--') && !flagsWithValues.has(rest[rest.indexOf(a) - 1]));
   const positionals = rest.filter((a, i) => !a.startsWith('--') && !flagsWithValues.has(rest[i - 1]));
   try {
@@ -245,6 +245,17 @@ if (require.main === module) {
       if (!target || !relpath) throw Object.assign(new Error('usage: cli.js set-report-dir <vault> <relpath>'), { usage: true });
       const r = setReportDir(target, relpath);
       console.error(`${r.created ? 'Created' : 'Updated'} ${r.configPath}`);
+      process.exit(0);
+    }
+    if (cmd === 'set-hierarchy') {
+      const parent = getFlagValue(rest, '--parent');
+      const childrenRaw = getFlagValue(rest, '--children');
+      if (!target || !parent || !childrenRaw) {
+        throw Object.assign(new Error('usage: cli.js set-hierarchy <vault> --parent <Parent> --children <Child1,Child2,...>'), { usage: true });
+      }
+      const children = childrenRaw.split(',').map((s) => s.trim()).filter(Boolean);
+      const r = setHierarchy(target, parent, children);
+      console.error(`${r.created ? 'Created' : 'Updated'} ${r.configPath} — ${parent}: ${children.join(', ')}`);
       process.exit(0);
     }
     if (cmd === 'audit') {

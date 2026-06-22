@@ -111,3 +111,38 @@ test('buildNestRecommendations: the nest op applied rewrites both frontmatter an
   assert.match(res.text, /#Investing\/DayTrading in the body/, 'body rewritten');
   assert.doesNotMatch(res.text, /#daytrading\b/, 'no flat occurrence left');
 });
+
+// --- upsertHierarchyCluster: validated merge of one cluster into a config obj -
+
+const { upsertHierarchyCluster } = require('../scripts/hierarchy.js');
+
+test('upsertHierarchyCluster: adds a new cluster to an empty config', () => {
+  const out = upsertHierarchyCluster({}, 'Investing', ['DayTrading', 'SwingTrading']);
+  assert.deepEqual(out.hierarchy, { Investing: ['DayTrading', 'SwingTrading'] });
+});
+
+test('upsertHierarchyCluster: preserves existing config keys (reportDir, brands)', () => {
+  const out = upsertHierarchyCluster({ reportDir: 'Meta/TM', brands: { mcp: 'MCP' } }, 'Investing', ['DayTrading']);
+  assert.equal(out.reportDir, 'Meta/TM');
+  assert.deepEqual(out.brands, { mcp: 'MCP' });
+  assert.deepEqual(out.hierarchy, { Investing: ['DayTrading'] });
+});
+
+test('upsertHierarchyCluster: merges into an existing parent, dedups children by logical key', () => {
+  const out = upsertHierarchyCluster({ hierarchy: { Investing: ['DayTrading'] } }, 'Investing', ['SwingTrading', 'daytrading']);
+  assert.deepEqual(out.hierarchy.Investing, ['DayTrading', 'SwingTrading'], 'union, order preserved, case-dup folded');
+});
+
+test('upsertHierarchyCluster: a case-variant parent merges into the existing parent key (no split)', () => {
+  const out = upsertHierarchyCluster({ hierarchy: { Investing: ['DayTrading'] } }, 'investing', ['SwingTrading']);
+  assert.deepEqual(Object.keys(out.hierarchy), ['Investing'], 'must not create a second case-variant parent');
+  assert.deepEqual(out.hierarchy.Investing, ['DayTrading', 'SwingTrading']);
+});
+
+test('upsertHierarchyCluster: REFUSES (throws) an invalid child — a write never persists a bad taxonomy', () => {
+  assert.throws(() => upsertHierarchyCluster({}, 'Investing', ['Day Trading']), /invalid|Day Trading/i);
+});
+
+test('upsertHierarchyCluster: REFUSES (throws) a child already declared under a different parent', () => {
+  assert.throws(() => upsertHierarchyCluster({ hierarchy: { Finance: ['Trading'] } }, 'Investing', ['Trading']), /more than one parent|invalid/i);
+});

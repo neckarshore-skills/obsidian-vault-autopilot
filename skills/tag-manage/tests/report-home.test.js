@@ -133,3 +133,40 @@ test('setReportDir: throws on an existing but unparseable json fence (surface, n
   const v = tmpVault({ 'Tag Manage Config.md': '# cfg\n\n```json\n{ not valid json }\n```\n' });
   assert.throws(() => setReportDir(v, 'Meta/TM'), /unparseable/);
 });
+
+// --- setHierarchy: persist an approved cluster into the config note ----------
+const { setHierarchy } = require('../scripts/report-home.js');
+
+test('setHierarchy: creates Tag Manage Config.md when absent, with the cluster', () => {
+  const v = tmpVault({ 'a.md': 'x\n' });
+  const r = setHierarchy(v, 'Investing', ['DayTrading', 'SwingTrading']);
+  assert.equal(r.created, true);
+  const cfg = require('../scripts/config.js').extractJsonFence(
+    fs.readFileSync(path.join(v, 'Tag Manage Config.md'), 'utf8'));
+  assert.deepEqual(cfg.hierarchy, { Investing: ['DayTrading', 'SwingTrading'] });
+});
+
+test('setHierarchy: updates an existing config note, preserving reportDir + brands', () => {
+  const v = tmpVault({ 'Tag Manage Config.md': '# cfg\n\n```json\n{\n  "reportDir": "Meta/TM",\n  "brands": { "mcp": "MCP" }\n}\n```\n' });
+  setHierarchy(v, 'Investing', ['DayTrading']);
+  const cfg = require('../scripts/config.js').extractJsonFence(
+    fs.readFileSync(path.join(v, 'Tag Manage Config.md'), 'utf8'));
+  assert.equal(cfg.reportDir, 'Meta/TM');
+  assert.equal(cfg.brands.mcp, 'MCP');
+  assert.deepEqual(cfg.hierarchy, { Investing: ['DayTrading'] });
+});
+
+test('setHierarchy: refuses to persist an invalid cluster (throws, writes nothing)', () => {
+  const v = tmpVault({ 'a.md': 'x\n' });
+  assert.throws(() => setHierarchy(v, 'Investing', ['Day Trading']), /invalid|Day Trading/i);
+  assert.equal(fs.existsSync(path.join(v, 'Tag Manage Config.md')), false);
+});
+
+test('CLI set-hierarchy: writes the hierarchy cluster into the config note', () => {
+  const v = tmpVault({ 'a.md': 'x\n' });
+  const r = spawnSync('node', [CLI, 'set-hierarchy', v, '--parent', 'Investing', '--children', 'DayTrading,SwingTrading'], { encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  const cfg = require('../scripts/config.js').extractJsonFence(
+    fs.readFileSync(path.join(v, 'Tag Manage Config.md'), 'utf8'));
+  assert.deepEqual(cfg.hierarchy, { Investing: ['DayTrading', 'SwingTrading'] });
+});

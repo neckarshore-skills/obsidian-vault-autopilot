@@ -95,4 +95,28 @@ function buildNestRecommendations(inventory, hierMap, notes) {
   return recs;
 }
 
-module.exports = { parseHierarchy, buildNestRecommendations };
+// Merge one approved cluster (parent -> children) into a config object and VALIDATE the
+// result. Pure (returns a new config object; does not mutate the input). Unlike the audit
+// path (which reports + excludes invalid entries), a deliberate write REFUSES to persist an
+// invalid taxonomy: it throws. Children are unioned into the matching parent (case-insensitive
+// parent match, declared display preserved), deduped by logical key, order preserved.
+function upsertHierarchyCluster(configObj, parent, children) {
+  const cfg = configObj || {};
+  const merged = {};
+  for (const [p, ch] of Object.entries(cfg.hierarchy || {})) merged[p] = [...(ch || [])];
+  // Merge into an existing parent key that matches case-insensitively (avoid a split
+  // "Investing"/"investing"); else add a new parent under the declared casing.
+  const targetKey = Object.keys(merged).find((k) => logicalKey(k) === logicalKey(parent)) || parent;
+  const existing = merged[targetKey] || [];
+  const seen = new Set(existing.map(logicalKey));
+  const add = [];
+  for (const c of children || []) {
+    if (!seen.has(logicalKey(c))) { seen.add(logicalKey(c)); add.push(c); }
+  }
+  merged[targetKey] = [...existing, ...add];
+  const { errors } = parseHierarchy(merged);
+  if (errors.length) throw new Error(`invalid hierarchy: ${errors.join('; ')}`);
+  return { ...cfg, hierarchy: merged };
+}
+
+module.exports = { parseHierarchy, buildNestRecommendations, upsertHierarchyCluster };
