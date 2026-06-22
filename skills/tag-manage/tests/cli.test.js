@@ -353,3 +353,32 @@ test('NEST end-to-end: the written nest file applies through the existing select
   assert.match(after, /#Investing\/DayTrading/);
   assert.doesNotMatch(after, /#daytrading\b/);
 });
+
+// --- F-NEST-1 (live UAT, 2026-06-22): converged re-audit clears the stale nest file ---
+// After a nest is applied, a re-audit computes 0 nest recs (convergence). The main recs
+// file is rewritten to [] unconditionally, but the nest sidecar was written only when
+// recs > 0 -> the OLD recs stayed on disk. Result: the report .md (and main recs) say
+// "no nests" while .tag-manage-nest.json still lists the applied ones -> a divergence
+// between the human-facing report and the machine sidecar. Found by live UAT; the prior
+// convergence test only asserted the RETURN value was [], never the on-disk artifact.
+test('runAudit: a converged re-audit clears the stale .tag-manage-nest.json to [] (no report/sidecar divergence)', () => {
+  const dir = tmpVault({ 'a.md': '---\ntags:\n  - daytrading\n---\nSee #daytrading.\n' });
+  const reportDirAbs = path.join(dir, 'Meta', 'Tag Management');
+  const opts = { date: '2026-06-22', defaultsPath: DEFAULTS,
+    configText: cfgWithHierarchy({ Investing: ['DayTrading'] }), reportDirAbs };
+  const nestPath = path.join(reportDirAbs, '.tag-manage-nest.json');
+
+  // Audit #1: the nest rec is written.
+  runAudit(dir, opts);
+  assert.equal(JSON.parse(fs.readFileSync(nestPath, 'utf8')).length, 1, 'audit #1 writes the nest rec');
+
+  // Apply the nest -> the flat child is now nested; nothing is left to nest.
+  const ops = selectOps(JSON.parse(fs.readFileSync(nestPath, 'utf8')), 'all');
+  applyToVault(dir, ops, { write: true, reportDirAbs });
+
+  // Audit #2 (convergence): 0 nest recs computed -> the on-disk sidecar MUST be cleared to [].
+  const out = runAudit(dir, opts);
+  assert.deepEqual(out.nestRecommendations, [], 'converged: no nest recs computed');
+  assert.deepEqual(JSON.parse(fs.readFileSync(nestPath, 'utf8')), [],
+    'the on-disk nest sidecar must be cleared to [] on convergence (no stale recs diverging from the report)');
+});
