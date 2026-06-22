@@ -54,6 +54,9 @@ skills above.
 | 2 | property-classify | Sets lifecycle `status` and `type` properties automatically | v0.2.x |
 | 3 | tag-manage | Audits existing tags; scores against PascalCase convention (severity-classified); renames, merges, and removes duplicates / case variants / convention violations behind a preview-and-confirm gate with a rich vault-written report | v0.1.7 |
 
+> **Tag hierarchy (beta):** `tag-manage` can also nest flat tags under a parent you declare
+> (`#daytrading` → `#Investing/DayTrading`). See the [Tag Hierarchy guide](docs/tag-hierarchy.md).
+
 **Planned** (designed but not yet active):
 
 | # | Skill | What it will do | Target |
