@@ -15,6 +15,7 @@ const { analyze } = require('./analysis.js');
 const { classifyTag } = require('./convention.js');
 const { buildRecommendations, buildContext } = require('./recommend.js');
 const { parseHierarchy, buildNestRecommendations } = require('./hierarchy.js');
+const { clusterByName } = require('./induce.js');
 const { renderReport, REPORT_MARKER_TAG } = require('./report.js');
 const { loadConfig, extractJsonFence } = require('./config.js');
 const { suggestReportDir, setReportDir, setHierarchy } = require('./report-home.js');
@@ -175,7 +176,7 @@ function selectOps(recommendations, selection) {
   return picked.flatMap((r) => r.ops);
 }
 
-module.exports = { walkMarkdown, readNotes, auditVault, applyToVault, planVault, MassChangeError, DEFAULT_MASS_CHANGE_THRESHOLD, runAudit, selectOps };
+module.exports = { walkMarkdown, readNotes, auditVault, applyToVault, planVault, MassChangeError, DEFAULT_MASS_CHANGE_THRESHOLD, runAudit, selectOps, runInduce };
 
 // ---- CLI -------------------------------------------------------------------
 
@@ -233,6 +234,20 @@ function resolveReportContext(target, rest) {
   return { defaultsPath, configText, reportDirAbs, date };
 }
 
+// tag-organize Slice 1 (induce-structure): build the inventory, propose name-based
+// candidate families, and write them to a dot-prefixed proposal sidecar (never scanned
+// by walkMarkdown -> no self-poisoning). The agent reviews the proposal, reads content
+// only for uncertain families, then persists approved clusters via set-hierarchy; the
+// nest itself rides the existing applyOps path (no new write code in Slice 1).
+function runInduce(dir, { reportDirAbs } = {}) {
+  const inventory = buildInventory(readNotes(dir));
+  const clusters = clusterByName(inventory);
+  const outDir = reportDirAbs || dir;
+  const outPath = path.join(outDir, '.tag-organize-clusters.json');
+  fs.writeFileSync(outPath, JSON.stringify(clusters, null, 2), 'utf8');
+  return { clusters, outPath };
+}
+
 if (require.main === module) {
   const [cmd, ...rest] = process.argv.slice(2);
   // Flags whose value argument must not be mistaken for the vault target.
@@ -261,6 +276,14 @@ if (require.main === module) {
       const children = childrenRaw.split(',').map((s) => s.trim()).filter(Boolean);
       const r = setHierarchy(target, parent, children);
       console.error(`${r.created ? 'Created' : 'Updated'} ${r.configPath} — ${parent}: ${children.join(', ')}`);
+      process.exit(0);
+    }
+    if (cmd === 'induce') {
+      if (!target) throw Object.assign(new Error('usage: cli.js induce <vault> [--report-dir DIR]'), { usage: true });
+      const { reportDirAbs } = resolveReportContext(target, rest);
+      const { clusters, outPath } = runInduce(target, { reportDirAbs });
+      console.error(`induce: ${clusters.length} candidate ${clusters.length === 1 ? 'family' : 'families'} proposed -> ${outPath}`);
+      console.error('  review, then per approved cluster: cli.js set-hierarchy <vault> --parent <P> --children <C1,C2>');
       process.exit(0);
     }
     if (cmd === 'audit') {

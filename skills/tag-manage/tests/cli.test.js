@@ -7,7 +7,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const { walkMarkdown, auditVault, planVault, applyToVault, MassChangeError, runAudit, selectOps } = require('../scripts/cli.js');
+const { walkMarkdown, auditVault, planVault, applyToVault, MassChangeError, runAudit, selectOps, runInduce } = require('../scripts/cli.js');
 
 function tmpVault(files) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tagm-'));
@@ -116,6 +116,23 @@ test('CLI audit subcommand prints the rich report (no write without --report-dir
   assert.equal(r.status, 0);
   assert.match(r.stdout, /Tag Analysis Report/);
   assert.match(r.stdout, /Health Score/);
+});
+
+// ---- tag-organize induce: cluster-proposal sidecar -------------------------
+
+test('runInduce writes a .tag-organize-clusters.json proposal from flat residual tags', () => {
+  const dir = tmpVault({
+    'a.md': '---\ntags: [Business-Strategy, BusinessModel]\n---\nbody\n',
+    'b.md': '---\ntags: [business-dev, Investing]\n---\nbody\n',
+  });
+  const res = runInduce(dir, {});
+  const sidecar = path.join(dir, '.tag-organize-clusters.json');
+  assert.ok(fs.existsSync(sidecar), 'proposal sidecar exists');
+  const clusters = JSON.parse(fs.readFileSync(sidecar, 'utf8'));
+  assert.equal(clusters.length, 1);
+  assert.equal(clusters[0].parent, 'Business');
+  assert.deepEqual(clusters[0].children, ['business-dev', 'Business-Strategy', 'BusinessModel']);
+  assert.equal(res.outPath, sidecar);
 });
 
 // ---- selectOps unit tests (Task 9) ----------------------------------------
