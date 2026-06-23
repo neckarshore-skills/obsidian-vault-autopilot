@@ -53,6 +53,7 @@ skills above.
 | 1 | note-quality-check | Scores notes by quality, recommends what to keep or delete | v0.2.x |
 | 2 | property-classify | Sets lifecycle `status` and `type` properties automatically | v0.2.x |
 | 3 | tag-manage | Audits existing tags; scores against PascalCase convention (severity-classified); renames, merges, and removes duplicates / case variants / convention violations behind a preview-and-confirm gate with a rich vault-written report | v0.1.7 |
+| 4 | tag-organize | Organizes flat tags into a nested hierarchy — AI-proposed parent/child families over existing tags, applied behind a confirm gate (Slice 1: structure only, no auto-tagging yet) | v0.2.x |
 
 > **Tag hierarchy (beta):** `tag-manage` can also nest flat tags under a parent you declare
 > (`#daytrading` → `#Investing/DayTrading`). See the [Tag Hierarchy guide](docs/tag-hierarchy.md).
@@ -61,7 +62,7 @@ skills above.
 
 | # | Skill | What it will do | Target |
 |---|-------|----------------|--------|
-| 1 | tag-manage (auto-tagging) | Suggests tags from note content for untagged notes (extends the audit + cleanup skill) | v0.3.0 |
+| 1 | tag-organize (auto-tag) | Fills under-tagged notes with tags from their content, behind a closed + gated-new vocabulary and a per-tag approval surface (tag-organize Slice 2) | v0.3.0 |
 
 Want to help shape any of these? **[Open an issue](https://github.com/neckarshore-ai/obsidian-vault-autopilot/issues)** with your use case.
 
