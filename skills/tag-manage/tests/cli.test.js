@@ -7,7 +7,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const { walkMarkdown, auditVault, planVault, applyToVault, MassChangeError, runAudit, selectOps, runInduce } = require('../scripts/cli.js');
+const { walkMarkdown, auditVault, planVault, applyToVault, MassChangeError, runAudit, selectOps, runInduce, reportStamp, excludeReportArtifacts } = require('../scripts/cli.js');
 
 function tmpVault(files) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tagm-'));
@@ -398,4 +398,28 @@ test('runAudit: a converged re-audit clears the stale .tag-manage-nest.json to [
   assert.deepEqual(out.nestRecommendations, [], 'converged: no nest recs computed');
   assert.deepEqual(JSON.parse(fs.readFileSync(nestPath, 'utf8')), [],
     'the on-disk nest sidecar must be cleared to [] on convergence (no stale recs diverging from the report)');
+});
+
+// ---- Slice 1.5 Task 1: report-filename HHMM stamp (Finding A regression) ----
+
+test('reportStamp: explicit --date suppresses the stamp (deterministic names for tests)', () => {
+  assert.equal(reportStamp('2026-06-24T14:30:05.000Z', true), '');
+});
+
+test('reportStamp: clock-default path stamps UTC HHMM so same-day re-runs do not collide', () => {
+  assert.equal(reportStamp('2026-06-24T14:30:05.000Z', false), '1430');
+  assert.equal(reportStamp('2026-06-22T09:07:00.000Z', false), '0907');
+});
+
+test('runAudit: a non-empty fileStamp lands in the report filename (no same-day overwrite)', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tagm-stamp-'));
+  try {
+    fs.writeFileSync(path.join(tmpDir, 'n.md'), '---\ntags:\n  - research\n---\nx\n', 'utf8');
+    const out = runAudit(tmpDir, {
+      date: '2026-06-24', fileStamp: '1430',
+      defaultsPath: path.join(__dirname, '..', 'references', 'tag-overrides.default.json'),
+      configText: null, reportDirAbs: tmpDir,
+    });
+    assert.ok(out.reportPath.endsWith('2026-06-24 1430 Tag Analysis Report - Vault-wide.md'), out.reportPath);
+  } finally { fs.rmSync(tmpDir, { recursive: true, force: true }); }
 });

@@ -129,7 +129,7 @@ function excludeReportArtifacts(notes, dir, reportDirAbs) {
   return notes.filter((n) => !(isInside(reportDirAbs, n.path) && isReportArtifact(n, markerEligible)));
 }
 
-function runAudit(dir, { date, defaultsPath, configText, reportDirAbs, nameSuffix = '' }) {
+function runAudit(dir, { date, fileStamp = '', defaultsPath, configText, reportDirAbs, nameSuffix = '' }) {
   const dict = loadConfig({ defaultsPath, configText });
   // Exclude only report artifacts inside reportDirAbs — never real notes.
   // This prevents a written report note from poisoning the next audit scan,
@@ -154,7 +154,7 @@ function runAudit(dir, { date, defaultsPath, configText, reportDirAbs, nameSuffi
   let reportPath = null;
   if (reportDirAbs) {
     fs.mkdirSync(reportDirAbs, { recursive: true });
-    reportPath = path.join(reportDirAbs, `${date} Tag Analysis Report - Vault-wide${nameSuffix}.md`);
+    reportPath = path.join(reportDirAbs, `${date}${fileStamp ? ' ' + fileStamp : ''} Tag Analysis Report - Vault-wide${nameSuffix}.md`);
     fs.writeFileSync(reportPath, report, 'utf8');
     fs.writeFileSync(path.join(reportDirAbs, `.tag-manage-recommendations.json`), JSON.stringify(recommendations, null, 2), 'utf8');
     // Separate nest file (dot-prefixed -> never scanned: not .md, not walked).
@@ -176,7 +176,7 @@ function selectOps(recommendations, selection) {
   return picked.flatMap((r) => r.ops);
 }
 
-module.exports = { walkMarkdown, readNotes, auditVault, applyToVault, planVault, MassChangeError, DEFAULT_MASS_CHANGE_THRESHOLD, runAudit, selectOps, runInduce };
+module.exports = { walkMarkdown, readNotes, auditVault, applyToVault, planVault, MassChangeError, DEFAULT_MASS_CHANGE_THRESHOLD, runAudit, selectOps, runInduce, reportStamp, excludeReportArtifacts };
 
 // ---- CLI -------------------------------------------------------------------
 
@@ -213,8 +213,16 @@ function printPlan(res, header) {
   }
 }
 
+// Filename time-stamp. Explicit --date => '' (deterministic names; the test seam).
+// Otherwise the UTC HHMM of the run instant, so same-day re-runs get distinct names
+// instead of overwriting. Restores pre-2026-06-24 behavior; slice(0,10) had dropped it.
+function reportStamp(isoString, hasExplicitDate) {
+  if (hasExplicitDate) return '';
+  return isoString.slice(11, 16).replace(':', '');
+}
+
 // Resolve config discovery + report-dir from CLI flags and vault-level config note.
-// Returns { defaultsPath, configText, reportDirAbs, date } — shared by audit and apply.
+// Returns { defaultsPath, configText, reportDirAbs, date, fileStamp } — shared by audit and apply.
 function resolveReportContext(target, rest) {
   const defaultsPath = path.join(__dirname, '..', 'references', 'tag-overrides.default.json');
   const cfgFlag = getFlagValue(rest, '--config');
@@ -230,8 +238,11 @@ function resolveReportContext(target, rest) {
   const reportDirAbs = reportDirFlag
     ? path.resolve(reportDirFlag)
     : (cfg && cfg.reportDir ? path.join(target, cfg.reportDir) : null);
-  const date = getFlagValue(rest, '--date') || new Date().toISOString().slice(0, 10);
-  return { defaultsPath, configText, reportDirAbs, date };
+  const dateFlag = getFlagValue(rest, '--date');
+  const iso = new Date().toISOString();
+  const date = dateFlag || iso.slice(0, 10);
+  const fileStamp = reportStamp(iso, !!dateFlag);
+  return { defaultsPath, configText, reportDirAbs, date, fileStamp };
 }
 
 // tag-organize Slice 1 (induce-structure): build the inventory, propose name-based
@@ -288,8 +299,8 @@ if (require.main === module) {
     }
     if (cmd === 'audit') {
       if (!target) throw Object.assign(new Error('usage: cli.js audit <vault> [--report-dir DIR] [--config FILE] [--date YYYY-MM-DD]'), { usage: true });
-      const { defaultsPath, configText, reportDirAbs, date } = resolveReportContext(target, rest);
-      const out = runAudit(target, { date, defaultsPath, configText, reportDirAbs });
+      const { defaultsPath, configText, reportDirAbs, date, fileStamp } = resolveReportContext(target, rest);
+      const out = runAudit(target, { date, fileStamp, defaultsPath, configText, reportDirAbs });
       console.log(out.report);
       if (out.reportPath) console.error(`Report written to ${out.reportPath}`);
       // Report hierarchy config errors (never swallow them) — invalid entries were excluded.
@@ -317,12 +328,12 @@ if (require.main === module) {
       } else {
         ops = loadOps(rest);
       }
-      const { defaultsPath, configText, reportDirAbs, date } = resolveReportContext(target, rest);
+      const { defaultsPath, configText, reportDirAbs, date, fileStamp } = resolveReportContext(target, rest);
       const res = applyToVault(target, ops, { write, massChangeThreshold, reportDirAbs });
       printPlan(res, write ? 'apply (WROTE)' : 'plan (dry-run, nothing written)');
       // After a successful --write apply, emit an after-changes report if --report-dir is set.
       if (write && res.wrote && reportDirAbs) {
-        const afterOut = runAudit(target, { date, defaultsPath, configText, reportDirAbs, nameSuffix: ' - after changes' });
+        const afterOut = runAudit(target, { date, fileStamp, defaultsPath, configText, reportDirAbs, nameSuffix: ' - after changes' });
         if (afterOut.reportPath) console.error(`After-changes report written to ${afterOut.reportPath}`);
       }
       process.exit(0);
