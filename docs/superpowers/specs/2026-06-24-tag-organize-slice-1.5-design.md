@@ -106,25 +106,27 @@ from future scans even at root (where the marker path is disabled).
 
 ## Testing (non-vacuous)
 
-The **load-bearing** protection against self-poisoning is the **backtick-wrapping**
-(plus the `Meta/TagManagement` marker containing `/`, which `clusterByName` skips). A
-well-formed proposal note does not form clusters even without exclusion; the exclusion
-is belt-and-suspenders for the non-underscore-`reportDir` config. Tests are designed so
-the wrapping invariant is the one that fails loudly if broken.
+**Correct poisoning mechanism (verified against the code, supersedes an earlier draft):**
+the family names in the proposal note are NOT `#`-prefixed, so `tags.js scanBody` (which
+matches only `#tag` inline tokens) never picks them up regardless of backticks — a
+`scanBody` contrast test would be **vacuous**. The real vector is the **obsidian-linter
+promoting a bare `#token` from the body into the note's own frontmatter on save** (the
+OBI-2026-06-21-2 incident). The load-bearing invariants are therefore: only the marker in
+frontmatter + no bare `#token` in the body. Backtick-wrapping is readability + defense.
+`Meta/TagManagement` contains `/`, so `clusterByName` skips it; `walkMarkdown` already
+skips `_`-dirs, so the exclusion is belt-and-suspenders for a non-underscore `reportDir`.
 
-1. **(load-bearing) `renderProposal` backtick-wraps every tag, and the wrapping is what
-   protects** — assert each tag name appears only backticked. Then the contrast that
-   makes it non-vacuous: feed `scanBody` (tags.js) the rendered body → it returns no
-   proposal tags; feed it a deliberately-unwrapped variant of the same body → it DOES
-   return them. Pins the OBI-2026-06-21-2 invariant.
-2. **Round-trip no self-poisoning, in a WALKED location** — write the proposal note into
-   a **non-underscore** dir (so `walkMarkdown` actually scans it — otherwise the test is
-   vacuous, since `_`-dirs are skipped regardless), run `induce` → no cluster derives
-   from the proposal note's own tags.
-3. **`isReportArtifact` excludes the proposal note** — the generalized regex matches
+1. **(load-bearing) frontmatter carries ONLY the marker** — `frontmatterTags(rendered)` ==
+   `['Meta/TagManagement']`; non-vacuous (a leaked family name would fail).
+2. **(load-bearing) body emits no bare `#token`** — `doesNotMatch(/#[A-Za-z0-9_]/)`
+   (Markdown `# `/`## ` headings are hash-space, not matched); pins the linter-promotion
+   invariant — rendering `#${parent}` would fail it.
+3. **backtick-wrapping** — every parent + child appears backticked.
+4. **`isReportArtifact` excludes the proposal note** — the generalized regex matches
    `<date> Tag Organize Proposal - Vault-wide.md`; a near-miss real note
-   (`My Tag Organize Proposal Notes.md`) is NOT dropped.
-4. **Filename stamp (pure seam)** — `reportStamp(iso, true)` → `''`;
+   (`My Tag Organize Proposal Notes.md`) is NOT dropped; `runInduce` writes the note only
+   when `reportDirAbs` is set.
+5. **Filename stamp (pure seam)** — `reportStamp(iso, true)` → `''`;
    `reportStamp(iso, false)` → the `HHMM` of the ISO string. Existing `--date` filename
    assertions stay green (verified: `cli.test.js`, `report-home.test.js` all pass `--date`).
 
