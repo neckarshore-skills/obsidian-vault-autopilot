@@ -8,6 +8,12 @@ test('hashtag-prefix is HIGH', () => assert.deepEqual(classifyTag('#research', c
 test('numeric-artifact is HIGH', () => assert.deepEqual(classifyTag('2026', ctx), { violation: 'numeric-artifact', severity: 'HIGH' }));
 test('snake_case is MEDIUM', () => assert.deepEqual(classifyTag('ai_agents', ctx), { violation: 'snake_case', severity: 'MEDIUM' }));
 test('lowercase-concept is MEDIUM', () => assert.deepEqual(classifyTag('research', ctx), { violation: 'lowercase-concept', severity: 'MEDIUM' }));
+// Blind-spot fix (2026-06-24 UAT): a lowercase tag WITH a hyphen ('personal-brand',
+// 'digital-garden') was NOT flagged before — only single-word lowercase was. Both violate
+// the Title-case-segment convention; canonicalForm already resolves them (-> PersonalBrand).
+test('lowercase-kebab is a lowercase-concept violation', () => assert.deepEqual(classifyTag('personal-brand', ctx), { violation: 'lowercase-concept', severity: 'MEDIUM' }));
+test('lowercase-kebab multi-segment is flagged', () => assert.deepEqual(classifyTag('ai-assisted-development', ctx), { violation: 'lowercase-concept', severity: 'MEDIUM' }));
+test('PascalCase-with-hyphen (AI-Coding) stays compliant', () => assert.deepEqual(classifyTag('AI-Coding', ctx), { violation: null, severity: null }));
 test('camelCase is MEDIUM', () => assert.deepEqual(classifyTag('fastAPI', ctx), { violation: 'camelCase', severity: 'MEDIUM' }));
 test('upper-kebab is MEDIUM', () => assert.deepEqual(classifyTag('App-Development', ctx), { violation: 'upper-kebab', severity: 'MEDIUM' }));
 test('flat-where-hierarchical is LOW', () => assert.deepEqual(classifyTag('DevTools', ctx), { violation: 'flat-where-hierarchical', severity: 'LOW' }));
