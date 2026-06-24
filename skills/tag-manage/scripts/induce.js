@@ -61,6 +61,10 @@ function clusterByName(inventory, opts = {}) {
     const tokens = tokenizeTag(display);
     if (tokens.length < 2) continue;              // single-token tag is not a family member
     const stem = tokens[0];
+    // A one-character or purely-numeric leading token is never a meaningful parent
+    // (e.g. B2B -> "b", 2-Fix -> "2"). User rule, 2026-06-24 UAT. Two-letter acronym
+    // stems ("ai", "ki") are real parents and are intentionally NOT suppressed.
+    if (stem.length === 1 || /^\d+$/.test(stem)) continue;
     if (!families.has(stem)) families.set(stem, []);
     families.get(stem).push(e);
   }

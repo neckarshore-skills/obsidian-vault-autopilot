@@ -49,3 +49,20 @@ test('clusterByName excludes reserved and already-nested tags, honors minMembers
   assert.deepEqual(clusters[0].children, ['AI-Agents', 'AI-Tools']);
   assert.deepEqual(clusterByName(inventory, { minMembers: 3 }), []); // raise the floor -> nothing
 });
+
+test('clusterByName suppresses single-character and purely-numeric stems', () => {
+  // A one-letter or all-digit leading token is never a meaningful parent (user rule,
+  // 2026-06-24 UAT): B2B* -> stem "b", 2-Fix/2prio -> stem "2" must NOT form a family.
+  // A two-letter stem like "ai"/"ki" is a real acronym parent and MUST survive.
+  const inventory = [
+    inv('b2b', 3, ['B2B']),
+    inv('b2bberater', 2, ['B2BBerater']),
+    inv('b2bdata', 1, ['B2BData']),     // stem "b" (single char) -> suppressed
+    inv('2-fix', 2, ['2-Fix']),
+    inv('2prio', 1, ['2prio']),         // stem "2" (numeric) -> suppressed
+    inv('ai-agents', 2, ['AI-Agents']),
+    inv('ai-tools', 1, ['AI-Tools']),   // stem "ai" (2 chars) -> survives
+  ];
+  const clusters = clusterByName(inventory);
+  assert.deepEqual(clusters.map((c) => c.parent), ['AI']); // only AI; "b" and "2" suppressed
+});

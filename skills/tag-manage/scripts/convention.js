@@ -14,7 +14,11 @@ function classifyTag(tag, ctx) {
   if (ctx.brandSet.has(key)) return { violation: null, severity: null };
   if (t.includes('_')) return { violation: 'snake_case', severity: 'MEDIUM' };
   if (/^\p{Ll}/u.test(t) && /\p{Ll}\p{Lu}/u.test(t)) return { violation: 'camelCase', severity: 'MEDIUM' };
-  if (/^\p{Ll}[\p{Ll}\p{N}]*$/u.test(t)) return { violation: 'lowercase-concept', severity: 'MEDIUM' };
+  // Lowercase concept tag — single-word ('research') OR hyphenated ('personal-brand',
+  // 'digital-garden'). The hyphen was the blind spot (2026-06-24 UAT): lowercase kebab
+  // slipped past every rule and read as compliant. AI-/KI- and proper nouns start uppercase
+  // (handled below / by the brand dict), so they never reach here.
+  if (/^\p{Ll}[\p{Ll}\p{N}-]*$/u.test(t)) return { violation: 'lowercase-concept', severity: 'MEDIUM' };
   if (/^\p{Lu}[\p{L}\p{N}]*-\p{Lu}/u.test(t) && !/^(AI|KI)-/.test(t) && !ctx.brandHyphenSet.has(key)) {
     return { violation: 'upper-kebab', severity: 'MEDIUM' };
   }
