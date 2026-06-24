@@ -133,4 +133,20 @@ function renderReport({ scope, date, analysis: a, findings: f, recommendations: 
   return lines.join('\n');
 }
 
-module.exports = { renderReport, table, REPORT_MARKER_TAG };
+// Human-readable induce proposal artifact. Mirrors renderReport: date injected (no clock),
+// carries REPORT_MARKER_TAG so future scans exclude it, backtick-wraps every tag name, and
+// emits NO bare #token (the obsidian-linter would promote such a token into this note's own
+// frontmatter -> self-poisoning; the OBI-2026-06-21-2 invariant). Name-only proposals to prune.
+function renderProposal({ scope, date, clusters }) {
+  const lines = [];
+  lines.push(`---\ntitle: 'Tag Organize Proposal - ${scope} - ${date}'\ntype: inbox\nstatus: draft\ncreated: ${date}\ntags:\n  - ${REPORT_MARKER_TAG}\n---\n`);
+  lines.push(`# Tag Organize Proposal\n`);
+  lines.push(`> [!summary]\n> **Scope:** ${scope}\n> **Candidate families:** ${fmt(clusters.length)}\n> Name-only groupings by shared leading token. Prune freely — a large family can be semantically empty (e.g. \`Open\` over \`OpenAI\` + \`OpenSource\`). Approve the good ones via \`set-hierarchy\`.\n`);
+  lines.push(`## Candidate Families\n\n` + (clusters.length ? table(['#', 'Parent', 'Children', 'Basis'], clusters.map((c, i) => [
+    i + 1, `\`${c.parent}\``, c.children.map((ch) => `\`${ch}\``).join(', '), c.basis,
+  ])) : '_No candidate families._') + '\n');
+  lines.push(`> [!tip] Next Steps\n> For each family you approve: \`cli.js set-hierarchy <vault> --parent <Parent> --children <Child1,Child2>\`, then re-audit and apply the nests behind the confirm gate. Skip families that do not represent a real parent.\n`);
+  return lines.join('\n');
+}
+
+module.exports = { renderReport, renderProposal, table, REPORT_MARKER_TAG };
