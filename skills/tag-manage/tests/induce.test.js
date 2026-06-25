@@ -33,7 +33,9 @@ test('clusterByName groups flat tags sharing a leading token into a family', () 
   const clusters = clusterByName(inventory);
   assert.equal(clusters.length, 1);
   assert.equal(clusters[0].parent, 'Business');  // most frequent leading segment casing
-  assert.deepEqual(clusters[0].children, ['business-dev', 'Business-Strategy', 'BusinessModel']); // A->Z case-insensitive
+  assert.deepEqual(clusters[0].children.map((c) => c.name), ['business-dev', 'Business-Strategy', 'BusinessModel']); // A->Z case-insensitive
+  assert.deepEqual(clusters[0].children.map((c) => c.count), [1, 3, 2]); // noteCount per child, in A->Z child order
+  assert.equal(clusters[0].notesTotal, 6); // 1 + 3 + 2
   assert.match(clusters[0].basis, /3 tags share leading token "business"/);
 });
 
@@ -46,7 +48,7 @@ test('clusterByName excludes reserved and already-nested tags, honors minMembers
   const clusters = clusterByName(inventory);
   assert.equal(clusters.length, 1);
   assert.equal(clusters[0].parent, 'AI');
-  assert.deepEqual(clusters[0].children, ['AI-Agents', 'AI-Tools']);
+  assert.deepEqual(clusters[0].children.map((c) => c.name), ['AI-Agents', 'AI-Tools']);
   assert.deepEqual(clusterByName(inventory, { minMembers: 3 }), []); // raise the floor -> nothing
 });
 
@@ -65,6 +67,22 @@ test('clusterByName suppresses single-character and purely-numeric stems', () =>
   ];
   const clusters = clusterByName(inventory);
   assert.deepEqual(clusters.map((c) => c.parent), ['AI']); // only AI; "b" and "2" suppressed
+});
+
+test('clusterByName enriches children with note counts and a family total', () => {
+  const inventory = [
+    inv('phase0', 12, ['Phase0']),
+    inv('phase1', 9, ['Phase1']),
+    inv('phase2', 4, ['Phase2']),
+  ];
+  const [family] = clusterByName(inventory);
+  assert.equal(family.parent, 'Phase');
+  assert.deepEqual(family.children, [
+    { name: 'Phase0', count: 12 },
+    { name: 'Phase1', count: 9 },
+    { name: 'Phase2', count: 4 },
+  ]);
+  assert.equal(family.notesTotal, 25);
 });
 
 // ---- Confidence triage (2026-06-25): scoring helpers ----

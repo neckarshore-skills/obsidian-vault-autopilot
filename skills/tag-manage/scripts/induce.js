@@ -87,9 +87,11 @@ function clusterByName(inventory, opts = {}) {
     const distinct = [...new Map(entries.map((e) => [logicalKey(e.variants[0] || e.key), e])).values()];
     if (distinct.length < minMembers) continue;
     const parent = mode(distinct.map((e) => leadingSegment(e.variants[0] || e.key)));
-    const children = distinct.map((e) => e.variants[0] || e.key)
-      .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())); // A->Z, case-insensitive
-    clusters.push({ parent, children, basis: `name: ${children.length} tags share leading token "${stem}"` });
+    const children = distinct
+      .map((e) => ({ name: e.variants[0] || e.key, count: e.noteCount || 0 }))
+      .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase())); // A->Z, case-insensitive
+    const notesTotal = children.reduce((sum, c) => sum + c.count, 0);
+    clusters.push({ parent, children, notesTotal, basis: `name: ${children.length} tags share leading token "${stem}"` });
   }
   clusters.sort((a, b) => b.children.length - a.children.length || a.parent.localeCompare(b.parent));
   return clusters;
