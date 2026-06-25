@@ -111,3 +111,69 @@ test('COINCIDENCE_PREFIXES contains the curated stoplist and is frozen', () => {
   assert.equal(COINCIDENCE_PREFIXES.size, 25);
   assert.equal(Object.isFrozen(COINCIDENCE_PREFIXES), true); // frozen (intent: do not mutate)
 });
+
+// ---- Confidence triage (2026-06-25): scoreCluster ----
+const { scoreCluster } = require('../scripts/induce.js');
+
+// scored-cluster factory. Single-token child names (Alpha/Beta/...) carry NO enumeration
+// suffix, so size/frequency tests are not perturbed by the +15 enum bonus.
+const fam = (parent, childNames, notesTotal = 0) => ({
+  parent,
+  children: childNames.map((name) => ({ name, count: 0 })),
+  notesTotal,
+});
+
+test('scoreCluster: base score for a plain 2-child family with no signals', () => {
+  const r = scoreCluster(fam('Customer', ['Alpha', 'Beta'], 0));
+  assert.equal(r.score, 40);     // base only
+  assert.equal(r.category, 'decide');
+  assert.equal(r.basis, 'base');
+});
+
+test('scoreCluster: size bonus is +10 per child over 2, capped at +30', () => {
+  assert.equal(scoreCluster(fam('A', ['Alpha', 'Beta', 'Gamma'], 0)).score, 50);                       // +10
+  assert.equal(scoreCluster(fam('A', ['Alpha', 'Beta', 'Gamma', 'Delta'], 0)).score, 60);              // +20
+  assert.equal(scoreCluster(fam('A', ['Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon', 'Zeta'], 0)).score, 70); // cap +30
+});
+
+test('scoreCluster: frequency tiers add 0 / 10 / 20', () => {
+  assert.equal(scoreCluster(fam('A', ['Alpha', 'Beta'], 4)).score, 40);   // <5 -> +0
+  assert.equal(scoreCluster(fam('A', ['Alpha', 'Beta'], 5)).score, 50);   // 5..60 -> +10
+  assert.equal(scoreCluster(fam('A', ['Alpha', 'Beta'], 60)).score, 50);  // boundary -> +10
+  assert.equal(scoreCluster(fam('A', ['Alpha', 'Beta'], 61)).score, 60);  // >60 -> +20
+});
+
+test('scoreCluster: enumeration-suffix majority adds +15', () => {
+  const r = scoreCluster(fam('Phase', ['Phase0', 'Phase1', 'Phase2'], 0));
+  assert.equal(r.score, 65);  // base 40 + size 10 (3 children) + enum 15
+  assert.match(r.basis, /enum/);
+});
+
+test('scoreCluster: declared-parent match adds +25 (case-insensitive)', () => {
+  const r = scoreCluster(fam('Business', ['Alpha', 'Beta'], 0), { declaredParents: ['business', 'AI'] });
+  assert.equal(r.score, 65);  // base 40 + declared 25
+  assert.match(r.basis, /declared/);
+});
+
+test('scoreCluster: coincidence-prefix subtracts 35', () => {
+  const r = scoreCluster(fam('Open', ['OpenAI', 'OpenSource'], 0));
+  assert.equal(r.score, 5);   // base 40 - 35
+  assert.equal(r.category, 'ignore');
+  assert.match(r.basis, /coincidence-prefix/);
+});
+
+test('scoreCluster: thresholds — implement >= 70, decide 40..69, ignore < 40', () => {
+  assert.equal(scoreCluster(fam('A', ['Alpha', 'Beta'], 0)).category, 'decide');             // 40
+  assert.equal(scoreCluster(fam('A', ['Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon', 'Zeta'], 61)).category, 'implement'); // 40+30+20=90
+  assert.equal(scoreCluster(fam('Open', ['OpenAI', 'OpenSource'], 0)).category, 'ignore'); // 5
+});
+
+test('scoreCluster: score clamps to 0..100', () => {
+  // max-stacked: declared + size cap + freq + enum = 40+25+30+20+15 = 130 -> 100
+  const hi = scoreCluster(
+    fam('Phase', ['Phase0', 'Phase1', 'Phase2', 'Phase3', 'Phase4', 'Phase5'], 61),
+    { declaredParents: ['Phase'] },
+  );
+  assert.equal(hi.score, 100);
+  assert.equal(scoreCluster(fam('Open', ['OpenAI', 'OpenSource'], 0)).score >= 0, true);
+});

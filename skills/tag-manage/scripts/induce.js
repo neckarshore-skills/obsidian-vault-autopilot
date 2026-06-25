@@ -97,4 +97,32 @@ function clusterByName(inventory, opts = {}) {
   return clusters;
 }
 
-module.exports = { tokenizeTag, leadingSegment, clusterByName, isEnumerationSuffix, COINCIDENCE_PREFIXES };
+// Deterministic structural confidence for a cluster. Pure, total, throw-free. The score
+// is an ordinal triage aid (signal strength), NOT a calibrated probability. See
+// docs/superpowers/specs/2026-06-25-tag-organize-confidence-triage-design.md.
+function scoreCluster(cluster, { declaredParents = [] } = {}) {
+  const signals = [];
+  let score = 40; // base
+
+  const sizeBonus = Math.min(30, Math.max(0, (cluster.children.length - 2) * 10));
+  if (sizeBonus) { score += sizeBonus; signals.push('size'); }
+
+  const total = cluster.notesTotal || 0;
+  const freqBonus = total > 60 ? 20 : total >= 5 ? 10 : 0;
+  if (freqBonus) { score += freqBonus; signals.push('freq'); }
+
+  const enumCount = cluster.children
+    .filter((c) => isEnumerationSuffix(tokenizeTag(c.name)[1] || '')).length;
+  if (enumCount * 2 > cluster.children.length) { score += 15; signals.push('enum'); }
+
+  const declaredLc = new Set(declaredParents.map((p) => String(p).toLowerCase()));
+  if (declaredLc.has(cluster.parent.toLowerCase())) { score += 25; signals.push('declared'); }
+
+  if (COINCIDENCE_PREFIXES.has(cluster.parent.toLowerCase())) { score -= 35; signals.push('coincidence-prefix'); }
+
+  score = Math.max(0, Math.min(100, score));
+  const category = score >= 70 ? 'implement' : score >= 40 ? 'decide' : 'ignore';
+  return { score, category, basis: signals.join('+') || 'base' };
+}
+
+module.exports = { tokenizeTag, leadingSegment, clusterByName, scoreCluster, isEnumerationSuffix, COINCIDENCE_PREFIXES };
