@@ -6,6 +6,20 @@
 // See docs/superpowers/specs/2026-06-23-tag-organize-design.md.
 const { logicalKey, isReserved } = require('./tags.js');
 
+// Common words that unrelated tags share by accident (OpenAI vs OpenSource). A leading
+// token on this list pushes a family's score down. Curated from the live 54-family run.
+const COINCIDENCE_PREFIXES = Object.freeze(new Set([
+  'auto', 'big', 'deep', 'early', 'free', 'front', 'full', 'go', 'high', 'large',
+  'local', 'long', 'low', 'make', 'multi', 'new', 'online', 'open', 'power', 'real',
+  'self', 'share', 'smart', 'static', 'work',
+]));
+
+// A suffix is an "enumeration" when it is purely numeric (Phase0, ISO27001) or
+// version-like (v2). Such families (Phase0-4) are strong real-family signals.
+function isEnumerationSuffix(suffix) {
+  return /^\d+$/.test(suffix) || /^v\d+$/i.test(suffix);
+}
+
 // Index where the first token ends: first separator, camelCase boundary, or letter<->digit.
 function firstTokenEnd(tag) {
   for (let i = 1; i < tag.length; i++) {
@@ -81,4 +95,4 @@ function clusterByName(inventory, opts = {}) {
   return clusters;
 }
 
-module.exports = { tokenizeTag, leadingSegment, clusterByName };
+module.exports = { tokenizeTag, leadingSegment, clusterByName, isEnumerationSuffix, COINCIDENCE_PREFIXES };

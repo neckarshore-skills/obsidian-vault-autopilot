@@ -66,3 +66,30 @@ test('clusterByName suppresses single-character and purely-numeric stems', () =>
   const clusters = clusterByName(inventory);
   assert.deepEqual(clusters.map((c) => c.parent), ['AI']); // only AI; "b" and "2" suppressed
 });
+
+// ---- Confidence triage (2026-06-25): scoring helpers ----
+const { isEnumerationSuffix, COINCIDENCE_PREFIXES } = require('../scripts/induce.js');
+
+test('isEnumerationSuffix: numeric and version-like suffixes are enumerations', () => {
+  assert.equal(isEnumerationSuffix('0'), true);
+  assert.equal(isEnumerationSuffix('1'), true);
+  assert.equal(isEnumerationSuffix('27001'), true);
+  assert.equal(isEnumerationSuffix('v2'), true);
+  assert.equal(isEnumerationSuffix('V3'), true);
+});
+
+test('isEnumerationSuffix: word suffixes are NOT enumerations', () => {
+  assert.equal(isEnumerationSuffix('ai'), false);
+  assert.equal(isEnumerationSuffix('source'), false);
+  assert.equal(isEnumerationSuffix('hosting'), false);
+  assert.equal(isEnumerationSuffix(''), false);
+});
+
+test('COINCIDENCE_PREFIXES contains the curated stoplist and is frozen', () => {
+  assert.equal(COINCIDENCE_PREFIXES.has('open'), true);
+  assert.equal(COINCIDENCE_PREFIXES.has('self'), true);
+  assert.equal(COINCIDENCE_PREFIXES.has('work'), true);
+  assert.equal(COINCIDENCE_PREFIXES.has('business'), false); // a real parent, not a coincidence prefix
+  assert.equal(COINCIDENCE_PREFIXES.size, 25);
+  assert.equal(Object.isFrozen(COINCIDENCE_PREFIXES), true); // frozen (intent: do not mutate)
+});
