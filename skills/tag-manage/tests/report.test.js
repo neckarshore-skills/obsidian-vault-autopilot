@@ -1,4 +1,5 @@
-const { renderReport } = require('../scripts/report.js');
+const { renderReport, renderProposal } = require('../scripts/report.js');
+const { frontmatterTags } = require('../scripts/tags.js');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
@@ -163,4 +164,29 @@ test('renderReport: nest section is linter-safe — no bare #token (self-poisoni
   // would promote into frontmatter as a tag.
   const nestSection = md.slice(md.search(/Tag Hierarchy/i));
   assert.doesNotMatch(nestSection, /(^|\s)#[\p{L}\p{N}][\p{L}\p{N}/_-]*/u, 'no bare #tag-shaped token in the nest section');
+});
+
+// ---- Slice 1.5 Task 2: renderProposal (induce human-readable proposal note) ----
+
+const PROPOSAL_SAMPLE = [
+  { parent: 'Linked', children: ['LinkedInMarketing', 'LinkedInOutreach'], basis: 'name: 2 tags share leading token "linked"' },
+  { parent: 'Open', children: ['OpenAI', 'OpenSource'], basis: 'name: 2 tags share leading token "open"' },
+];
+
+test('renderProposal: frontmatter carries ONLY the report marker tag (no family name leaks in)', () => {
+  const md = renderProposal({ scope: 'Vault-wide', date: '2026-06-24', clusters: PROPOSAL_SAMPLE });
+  assert.deepEqual(frontmatterTags(md).map((t) => t.tag), ['Meta/TagManagement']);
+});
+
+test('renderProposal: body emits NO bare #token (obsidian-linter would promote it -> self-poisoning)', () => {
+  const md = renderProposal({ scope: 'Vault-wide', date: '2026-06-24', clusters: PROPOSAL_SAMPLE });
+  assert.doesNotMatch(md, /(^|\s)#[\p{L}\p{N}][\p{L}\p{N}/_-]*/u, 'no bare #tag-shaped token anywhere in the proposal note');
+});
+
+test('renderProposal: every parent and child is backtick-wrapped', () => {
+  const md = renderProposal({ scope: 'Vault-wide', date: '2026-06-24', clusters: PROPOSAL_SAMPLE });
+  for (const c of PROPOSAL_SAMPLE) {
+    assert.match(md, new RegExp('`' + c.parent + '`'));
+    for (const ch of c.children) assert.match(md, new RegExp('`' + ch + '`'));
+  }
 });

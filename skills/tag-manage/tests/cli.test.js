@@ -7,7 +7,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const { walkMarkdown, auditVault, planVault, applyToVault, MassChangeError, runAudit, selectOps, runInduce } = require('../scripts/cli.js');
+const { walkMarkdown, auditVault, planVault, applyToVault, MassChangeError, runAudit, selectOps, runInduce, reportStamp, excludeReportArtifacts } = require('../scripts/cli.js');
 
 function tmpVault(files) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tagm-'));
@@ -398,4 +398,78 @@ test('runAudit: a converged re-audit clears the stale .tag-manage-nest.json to [
   assert.deepEqual(out.nestRecommendations, [], 'converged: no nest recs computed');
   assert.deepEqual(JSON.parse(fs.readFileSync(nestPath, 'utf8')), [],
     'the on-disk nest sidecar must be cleared to [] on convergence (no stale recs diverging from the report)');
+});
+
+// ---- Slice 1.5 Task 1: report-filename HHMM stamp (Finding A regression) ----
+
+test('reportStamp: explicit --date suppresses the stamp (deterministic names for tests)', () => {
+  assert.equal(reportStamp('2026-06-24T14:30:05.000Z', true), '');
+});
+
+test('reportStamp: clock-default path stamps UTC HHMM so same-day re-runs do not collide', () => {
+  assert.equal(reportStamp('2026-06-24T14:30:05.000Z', false), '1430');
+  assert.equal(reportStamp('2026-06-22T09:07:00.000Z', false), '0907');
+});
+
+test('runAudit: a non-empty fileStamp lands in the report filename (no same-day overwrite)', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tagm-stamp-'));
+  try {
+    fs.writeFileSync(path.join(tmpDir, 'n.md'), '---\ntags:\n  - research\n---\nx\n', 'utf8');
+    const out = runAudit(tmpDir, {
+      date: '2026-06-24', fileStamp: '1430',
+      defaultsPath: path.join(__dirname, '..', 'references', 'tag-overrides.default.json'),
+      configText: null, reportDirAbs: tmpDir,
+    });
+    assert.ok(out.reportPath.endsWith('2026-06-24 1430 Tag Analysis Report - Vault-wide.md'), out.reportPath);
+  } finally { fs.rmSync(tmpDir, { recursive: true, force: true }); }
+});
+
+// ---- Slice 1.5 Task 3: induce proposal note + generalized artifact exclusion ----
+
+test('excludeReportArtifacts: drops Tag Organize Proposal + marker siblings, keeps real + near-miss', () => {
+  const dir = '/vault';
+  const reportDir = path.join(dir, 'Meta', 'Tag Reports'); // non-underscore -> markerEligible
+  const notes = [
+    { path: path.join(reportDir, '2026-06-24 1430 Tag Organize Proposal - Vault-wide.md'), text: '---\ntags:\n  - Meta/TagManagement\n---\nx\n' },
+    { path: path.join(reportDir, 'Master Summary.md'), text: '---\ntags:\n  - Meta/TagManagement\n---\nx\n' },
+    { path: path.join(reportDir, 'My Tag Organize Proposal Notes.md'), text: '---\ntags:\n  - research\n---\nx\n' },
+    { path: path.join(dir, 'real.md'), text: '---\ntags:\n  - research\n---\nx\n' },
+  ];
+  const kept = excludeReportArtifacts(notes, dir, reportDir).map((n) => path.basename(n.path));
+  assert.ok(!kept.includes('2026-06-24 1430 Tag Organize Proposal - Vault-wide.md'), 'proposal note excluded by regex');
+  assert.ok(!kept.includes('Master Summary.md'), 'marker sibling excluded');
+  assert.ok(kept.includes('My Tag Organize Proposal Notes.md'), 'near-miss name kept (no marker, no " - " match)');
+  assert.ok(kept.includes('real.md'), 'real note kept');
+});
+
+test('excludeReportArtifacts (root case): proposal note excluded by the generalized filename regex (marker gated off at root)', () => {
+  const dir = '/vault';
+  const notes = [
+    { path: path.join(dir, '2026-06-24 1430 Tag Organize Proposal - Vault-wide.md'), text: '---\ntags:\n  - Meta/TagManagement\n---\nx\n' },
+    { path: path.join(dir, 'real.md'), text: '---\ntags:\n  - research\n---\nx\n' },
+  ];
+  // reportDir == root -> markerEligible is false, so ONLY the filename regex can exclude.
+  const kept = excludeReportArtifacts(notes, dir, dir).map((n) => path.basename(n.path));
+  assert.ok(!kept.includes('2026-06-24 1430 Tag Organize Proposal - Vault-wide.md'), 'proposal note excluded by filename regex even at root');
+  assert.ok(kept.includes('real.md'), 'real note kept at root');
+});
+
+test('runInduce: writes a stamped proposal note only when reportDirAbs is set; dot-sidecar always', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tagm-induce-note-'));
+  try {
+    fs.writeFileSync(path.join(tmpDir, 'a.md'), '---\ntags:\n  - LinkedInMarketing\n---\nx\n', 'utf8');
+    fs.writeFileSync(path.join(tmpDir, 'b.md'), '---\ntags:\n  - LinkedInOutreach\n---\ny\n', 'utf8');
+
+    const r1 = runInduce(tmpDir, { date: '2026-06-24', fileStamp: '' });
+    assert.equal(r1.notePath, null, 'no .md note without reportDirAbs');
+    assert.ok(fs.existsSync(r1.outPath), 'dot-sidecar always written');
+
+    const rd = path.join(tmpDir, 'reports');
+    const r2 = runInduce(tmpDir, { reportDirAbs: rd, date: '2026-06-24', fileStamp: '1430' });
+    assert.ok(r2.notePath.endsWith('2026-06-24 1430 Tag Organize Proposal - Vault-wide.md'), r2.notePath);
+    const note = fs.readFileSync(r2.notePath, 'utf8');
+    assert.match(note, /Meta\/TagManagement/);
+    assert.match(note, /`Linked`/);            // parent (leading token), backtick-wrapped
+    assert.match(note, /`LinkedInMarketing`/); // a child
+  } finally { fs.rmSync(tmpDir, { recursive: true, force: true }); }
 });

@@ -65,8 +65,9 @@ shared `tag-manage` CLI.
 node "${CLAUDE_PLUGIN_ROOT}/skills/tag-manage/scripts/cli.js" induce "${OBSIDIAN_VAULT_PATH}"
 ```
 
-This writes `.tag-organize-clusters.json` (a dot-prefixed sidecar, never scanned)
-to the report directory (or the vault root). Read it.
+This writes `.tag-organize-clusters.json` (a dot-prefixed sidecar, never scanned) and,
+when a report home is configured, a browsable `<date> Tag Organize Proposal - Vault-wide.md`
+note — the human-readable view of the same families. Read either.
 
 **2. Present the proposal.** Show the candidate families as a numbered table:
 
@@ -131,6 +132,10 @@ End every run with:
   do not assume the proposal is final.
 - No content-based auto-tagging. Under-tagged notes are not filled — that is the
   later auto-tag slice (`addTagsToNote`), a separate build with its own gate.
+- A configured `reportDir` (via `Tag Manage Config.md`) makes `audit` and `induce`
+  WRITE their report artifacts even without `--report-dir`. A "read-only audit" is not
+  strictly read-only when a report home is set; the dated `HHMM` filename keeps same-day
+  re-runs from overwriting each other.
 
 ## Quality check
 
