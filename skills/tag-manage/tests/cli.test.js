@@ -131,7 +131,7 @@ test('runInduce writes a .tag-organize-clusters.json proposal from flat residual
   const clusters = JSON.parse(fs.readFileSync(sidecar, 'utf8'));
   assert.equal(clusters.length, 1);
   assert.equal(clusters[0].parent, 'Business');
-  assert.deepEqual(clusters[0].children, ['business-dev', 'Business-Strategy', 'BusinessModel']);
+  assert.deepEqual(clusters[0].children.map((c) => c.name), ['business-dev', 'Business-Strategy', 'BusinessModel']);
   assert.equal(res.outPath, sidecar);
 });
 
@@ -472,4 +472,24 @@ test('runInduce: writes a stamped proposal note only when reportDirAbs is set; d
     assert.match(note, /`Linked`/);            // parent (leading token), backtick-wrapped
     assert.match(note, /`LinkedInMarketing`/); // a child
   } finally { fs.rmSync(tmpDir, { recursive: true, force: true }); }
+});
+
+test('runInduce: scores clusters; declared-parent + frequency reach implement; JSON carries score/category', () => {
+  const dir = tmpVault({
+    'p1.md': '---\ntags:\n  - ProjectManagement\n---\nx\n',
+    'p2.md': '---\ntags:\n  - ProjectManagement\n---\nx\n',
+    'p3.md': '---\ntags:\n  - ProjectManagement\n---\nx\n',
+    'p4.md': '---\ntags:\n  - ProjectInstructions\n---\nx\n',
+    'p5.md': '---\ntags:\n  - ProjectInstructions\n---\nx\n',
+  });
+  const reportDirAbs = path.join(dir, '_reports');
+  const { clusters } = runInduce(dir, { reportDirAbs, date: '2026-06-25', declaredParents: ['Project'] });
+  const project = clusters.find((c) => c.parent === 'Project');
+  assert.ok(project, 'Project family proposed');
+  assert.equal(project.notesTotal, 5);   // ProjectManagement 3 + ProjectInstructions 2
+  assert.equal(project.score, 75);       // base 40 + declared 25 + freq 10
+  assert.equal(project.category, 'implement');
+  assert.ok(project.children.every((ch) => typeof ch.count === 'number'));
+  const written = JSON.parse(fs.readFileSync(path.join(reportDirAbs, '.tag-organize-clusters.json'), 'utf8'));
+  assert.ok(written[0].category && typeof written[0].score === 'number', 'JSON carries score + category');
 });
