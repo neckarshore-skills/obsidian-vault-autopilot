@@ -69,11 +69,24 @@ This writes `.tag-organize-clusters.json` (a dot-prefixed sidecar, never scanned
 when a report home is configured, a browsable `<date> Tag Organize Proposal - Vault-wide.md`
 note — the human-readable view of the same families. Read either.
 
-**2. Present the proposal.** Show the candidate families as a numbered table:
+**2. Present the proposal (three tables).** `induce` scores each family by structural
+signal (family size, note frequency, enumeration suffix, match against a declared config
+parent, minus a coincidence-prefix penalty) and splits them into three sections in the
+proposal note:
 
-| # | Parent | Children | Basis |
-|---|--------|----------|-------|
-| 1 | Business | Business-Strategy, BusinessModel, business-dev | name: 3 tags share leading token "business" |
+- **Implement** — high structural confidence (e.g. enumerated families like `Phase0-4`, or
+  a parent that matches a declared config parent). Propose the whole bucket as a default
+  batch: show the one table, let the user deselect any they reject, then persist + apply
+  the rest.
+- **Decide** — the uncertain middle. Work through individually; for families whose names do
+  not settle the call, use the content-read gate below.
+- **Ignore** — likely name-coincidence (a common-word prefix, e.g. `Open` over `OpenAI` +
+  `OpenSource`). Skipped by default; the user may still promote one.
+
+Each row carries `Notes` (how many notes the family touches) and `Score` (0–100). The score
+is a structural signal strength, **not** a probability — use it with `Notes` to triage.
+`Implement` is a recommendation, never auto-apply: every nest still goes through the confirm
+gate in step 5.
 
 **3. Disambiguate the uncertain ones (content-read gate).** For families whose
 placement the names do not settle, read a bounded sample of note bodies to decide.
