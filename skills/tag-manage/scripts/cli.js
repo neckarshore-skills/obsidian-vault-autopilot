@@ -15,7 +15,7 @@ const { analyze } = require('./analysis.js');
 const { classifyTag } = require('./convention.js');
 const { buildRecommendations, buildContext } = require('./recommend.js');
 const { parseHierarchy, buildNestRecommendations } = require('./hierarchy.js');
-const { clusterByName } = require('./induce.js');
+const { clusterByName, scoreCluster } = require('./induce.js');
 const { renderReport, renderProposal, REPORT_MARKER_TAG } = require('./report.js');
 const { loadConfig, extractJsonFence } = require('./config.js');
 const { suggestReportDir, setReportDir, setHierarchy } = require('./report-home.js');
@@ -250,11 +250,11 @@ function resolveReportContext(target, rest) {
 // by walkMarkdown -> no self-poisoning). The agent reviews the proposal, reads content
 // only for uncertain families, then persists approved clusters via set-hierarchy; the
 // nest itself rides the existing applyOps path (no new write code in Slice 1).
-function runInduce(dir, { reportDirAbs, date, fileStamp = '', scope = 'Vault-wide' } = {}) {
+function runInduce(dir, { reportDirAbs, date, fileStamp = '', scope = 'Vault-wide', declaredParents = [] } = {}) {
   // Exclude report artifacts before scanning — mirrors runAudit (matters when reportDir is
   // a non-underscore dir that walkMarkdown would otherwise scan, incl. a prior proposal note).
   const inventory = buildInventory(excludeReportArtifacts(readNotes(dir), dir, reportDirAbs));
-  const clusters = clusterByName(inventory);
+  const clusters = clusterByName(inventory).map((c) => ({ ...c, ...scoreCluster(c, { declaredParents }) }));
   const outDir = reportDirAbs || dir;
   fs.mkdirSync(outDir, { recursive: true }); // ensure the report home exists before any write
   const outPath = path.join(outDir, '.tag-organize-clusters.json');
@@ -302,9 +302,13 @@ if (require.main === module) {
     }
     if (cmd === 'induce') {
       if (!target) throw Object.assign(new Error('usage: cli.js induce <vault> [--report-dir DIR]'), { usage: true });
-      const { reportDirAbs, date, fileStamp } = resolveReportContext(target, rest);
-      const { clusters, outPath, notePath } = runInduce(target, { reportDirAbs, date, fileStamp });
-      console.error(`induce: ${clusters.length} candidate ${clusters.length === 1 ? 'family' : 'families'} proposed -> ${outPath}`);
+      const { defaultsPath, configText, reportDirAbs, date, fileStamp } = resolveReportContext(target, rest);
+      const dict = loadConfig({ defaultsPath, configText });
+      const declaredParents = Object.keys(dict.hierarchy || {});
+      const { clusters, outPath, notePath } = runInduce(target, { reportDirAbs, date, fileStamp, declaredParents });
+      const byCat = { implement: 0, decide: 0, ignore: 0 };
+      for (const c of clusters) byCat[c.category] = (byCat[c.category] || 0) + 1;
+      console.error(`induce: ${clusters.length} candidate ${clusters.length === 1 ? 'family' : 'families'} proposed (implement ${byCat.implement} / decide ${byCat.decide} / ignore ${byCat.ignore}) -> ${outPath}`);
       if (notePath) console.error(`  proposal note: ${notePath}`);
       console.error('  review, then per approved cluster: cli.js set-hierarchy <vault> --parent <P> --children <C1,C2>');
       process.exit(0);

@@ -138,13 +138,33 @@ function renderReport({ scope, date, analysis: a, findings: f, recommendations: 
 // emits NO bare #token (the obsidian-linter would promote such a token into this note's own
 // frontmatter -> self-poisoning; the OBI-2026-06-21-2 invariant). Name-only proposals to prune.
 function renderProposal({ scope, date, clusters }) {
+  const CATS = [
+    ['implement', 'Implement (recommended — review, then apply as a batch)'],
+    ['decide', 'Decide (your call — content-sample the unclear ones)'],
+    ['ignore', 'Ignore (likely name-coincidence — skip)'],
+  ];
+  const counts = { implement: 0, decide: 0, ignore: 0 };
+  for (const c of clusters) counts[c.category] = (counts[c.category] || 0) + 1;
+
+  const childrenCell = (c) => c.children.map((ch) => `\`${ch.name}\` (${fmt(ch.count)})`).join(', ');
+
+  const section = ([cat, heading]) => {
+    const rows = clusters
+      .filter((c) => c.category === cat)
+      .sort((a, b) => b.score - a.score || a.parent.localeCompare(b.parent));
+    const body = rows.length
+      ? table(['#', 'Parent', 'Children', 'Notes', 'Score', 'Basis'], rows.map((c, i) => [
+          i + 1, `\`${c.parent}\``, childrenCell(c), fmt(c.notesTotal), c.score, c.basis,
+        ]))
+      : '_(none)_';
+    return `## ${heading}\n\n${body}\n`;
+  };
+
   const lines = [];
   lines.push(`---\ntitle: 'Tag Organize Proposal - ${scope} - ${date}'\ntype: inbox\nstatus: draft\ncreated: ${date}\ntags:\n  - ${REPORT_MARKER_TAG}\n---\n`);
   lines.push(`# Tag Organize Proposal\n`);
-  lines.push(`> [!summary]\n> **Scope:** ${scope}\n> **Candidate families:** ${fmt(clusters.length)}\n> Name-only groupings by shared leading token. Prune freely — a large family can be semantically empty (e.g. \`Open\` over \`OpenAI\` + \`OpenSource\`). Approve the good ones via \`set-hierarchy\`.\n`);
-  lines.push(`## Candidate Families\n\n` + (clusters.length ? table(['#', 'Parent', 'Children', 'Basis'], clusters.map((c, i) => [
-    i + 1, `\`${c.parent}\``, c.children.map((ch) => `\`${ch}\``).join(', '), c.basis,
-  ])) : '_No candidate families._') + '\n');
+  lines.push(`> [!summary]\n> **Scope:** ${scope}\n> **Candidate families:** ${fmt(clusters.length)} -> Implement ${counts.implement} . Decide ${counts.decide} . Ignore ${counts.ignore}\n> Score = structural signal strength (not a probability) — see Basis. Implement is a recommended batch, still applied behind the confirm gate; nothing is auto-applied.\n`);
+  for (const c of CATS) lines.push(section(c));
   lines.push(`> [!tip] Next Steps\n> For each family you approve: \`cli.js set-hierarchy <vault> --parent <Parent> --children <Child1,Child2>\`, then re-audit and apply the nests behind the confirm gate. Skip families that do not represent a real parent.\n`);
   return lines.join('\n');
 }

@@ -53,7 +53,7 @@ skills above.
 | 1 | note-quality-check | Scores notes by quality, recommends what to keep or delete | v0.2.x |
 | 2 | property-classify | Sets lifecycle `status` and `type` properties automatically | v0.2.x |
 | 3 | tag-manage | Audits existing tags; scores against PascalCase convention (severity-classified); renames, merges, and removes duplicates / case variants / convention violations behind a preview-and-confirm gate with a rich vault-written report | v0.1.7 |
-| 4 | tag-organize | Organizes flat tags into a nested hierarchy — AI-proposed parent/child families over existing tags, written to a browsable proposal note for review and applied behind a confirm gate (Slice 1: structure only, no auto-tagging yet) | v0.2.x |
+| 4 | tag-organize | Organizes flat tags into a nested hierarchy — AI-proposed parent/child families over existing tags, scored and split into Implement / Decide / Ignore (with per-family note-counts) in a browsable proposal note so you triage by confidence and impact, applied behind a confirm gate (Slice 1: structure only, no auto-tagging yet) | v0.2.x |
 
 > **Tag hierarchy (beta):** `tag-manage` can also nest flat tags under a parent you declare
 > (`#daytrading` → `#Investing/DayTrading`). See the [Tag Hierarchy guide](docs/tag-hierarchy.md).

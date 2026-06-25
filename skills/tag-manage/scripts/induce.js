@@ -6,6 +6,20 @@
 // See docs/superpowers/specs/2026-06-23-tag-organize-design.md.
 const { logicalKey, isReserved } = require('./tags.js');
 
+// Common words that unrelated tags share by accident (OpenAI vs OpenSource). A leading
+// token on this list pushes a family's score down. Curated from the live 54-family run.
+const COINCIDENCE_PREFIXES = Object.freeze(new Set([
+  'auto', 'big', 'deep', 'early', 'free', 'front', 'full', 'go', 'high', 'large',
+  'local', 'long', 'low', 'make', 'multi', 'new', 'online', 'open', 'power', 'real',
+  'self', 'share', 'smart', 'static', 'work',
+]));
+
+// A suffix is an "enumeration" when it is purely numeric (Phase0, ISO27001) or
+// version-like (v2). Such families (Phase0-4) are strong real-family signals.
+function isEnumerationSuffix(suffix) {
+  return /^\d+$/.test(suffix) || /^v\d+$/i.test(suffix);
+}
+
 // Index where the first token ends: first separator, camelCase boundary, or letter<->digit.
 function firstTokenEnd(tag) {
   for (let i = 1; i < tag.length; i++) {
@@ -73,12 +87,42 @@ function clusterByName(inventory, opts = {}) {
     const distinct = [...new Map(entries.map((e) => [logicalKey(e.variants[0] || e.key), e])).values()];
     if (distinct.length < minMembers) continue;
     const parent = mode(distinct.map((e) => leadingSegment(e.variants[0] || e.key)));
-    const children = distinct.map((e) => e.variants[0] || e.key)
-      .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())); // A->Z, case-insensitive
-    clusters.push({ parent, children, basis: `name: ${children.length} tags share leading token "${stem}"` });
+    const children = distinct
+      .map((e) => ({ name: e.variants[0] || e.key, count: e.noteCount || 0 }))
+      .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase())); // A->Z, case-insensitive
+    const notesTotal = children.reduce((sum, c) => sum + c.count, 0);
+    clusters.push({ parent, children, notesTotal, basis: `name: ${children.length} tags share leading token "${stem}"` });
   }
   clusters.sort((a, b) => b.children.length - a.children.length || a.parent.localeCompare(b.parent));
   return clusters;
 }
 
-module.exports = { tokenizeTag, leadingSegment, clusterByName };
+// Deterministic structural confidence for a cluster. Pure, total, throw-free. The score
+// is an ordinal triage aid (signal strength), NOT a calibrated probability. See
+// docs/superpowers/specs/2026-06-25-tag-organize-confidence-triage-design.md.
+function scoreCluster(cluster, { declaredParents = [] } = {}) {
+  const signals = [];
+  let score = 40; // base
+
+  const sizeBonus = Math.min(30, Math.max(0, (cluster.children.length - 2) * 10));
+  if (sizeBonus) { score += sizeBonus; signals.push('size'); }
+
+  const total = cluster.notesTotal || 0;
+  const freqBonus = total > 60 ? 20 : total >= 5 ? 10 : 0;
+  if (freqBonus) { score += freqBonus; signals.push('freq'); }
+
+  const enumCount = cluster.children
+    .filter((c) => isEnumerationSuffix(tokenizeTag(c.name)[1] || '')).length;
+  if (enumCount * 2 > cluster.children.length) { score += 15; signals.push('enum'); }
+
+  const declaredLc = new Set(declaredParents.map((p) => String(p).toLowerCase()));
+  if (declaredLc.has(cluster.parent.toLowerCase())) { score += 25; signals.push('declared'); }
+
+  if (COINCIDENCE_PREFIXES.has(cluster.parent.toLowerCase())) { score -= 35; signals.push('coincidence-prefix'); }
+
+  score = Math.max(0, Math.min(100, score));
+  const category = score >= 70 ? 'implement' : score >= 40 ? 'decide' : 'ignore';
+  return { score, category, basis: signals.join('+') || 'base' };
+}
+
+module.exports = { tokenizeTag, leadingSegment, clusterByName, scoreCluster, isEnumerationSuffix, COINCIDENCE_PREFIXES };
