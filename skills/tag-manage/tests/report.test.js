@@ -169,8 +169,12 @@ test('renderReport: nest section is linter-safe — no bare #token (self-poisoni
 // ---- Slice 1.5 Task 2: renderProposal (induce human-readable proposal note) ----
 
 const PROPOSAL_SAMPLE = [
-  { parent: 'Linked', children: ['LinkedInMarketing', 'LinkedInOutreach'], basis: 'name: 2 tags share leading token "linked"' },
-  { parent: 'Open', children: ['OpenAI', 'OpenSource'], basis: 'name: 2 tags share leading token "open"' },
+  { parent: 'Phase', children: [{ name: 'Phase0', count: 12 }, { name: 'Phase1', count: 9 }],
+    notesTotal: 21, score: 85, category: 'implement', basis: 'size+enum' },
+  { parent: 'Customer', children: [{ name: 'CustomerDiscovery', count: 3 }, { name: 'CustomerService', count: 2 }],
+    notesTotal: 5, score: 50, category: 'decide', basis: 'freq' },
+  { parent: 'Open', children: [{ name: 'OpenAI', count: 8 }, { name: 'OpenSource', count: 4 }],
+    notesTotal: 12, score: 25, category: 'ignore', basis: 'coincidence-prefix' },
 ];
 
 test('renderProposal: frontmatter carries ONLY the report marker tag (no family name leaks in)', () => {
@@ -187,6 +191,44 @@ test('renderProposal: every parent and child is backtick-wrapped', () => {
   const md = renderProposal({ scope: 'Vault-wide', date: '2026-06-24', clusters: PROPOSAL_SAMPLE });
   for (const c of PROPOSAL_SAMPLE) {
     assert.match(md, new RegExp('`' + c.parent + '`'));
-    for (const ch of c.children) assert.match(md, new RegExp('`' + ch + '`'));
+    for (const ch of c.children) assert.match(md, new RegExp('`' + ch.name + '`'));
   }
+});
+
+test('renderProposal: renders three category sections in Implement/Decide/Ignore order', () => {
+  const md = renderProposal({ scope: 'Vault-wide', date: '2026-06-25', clusters: PROPOSAL_SAMPLE });
+  const iImpl = md.indexOf('## Implement');
+  const iDec = md.indexOf('## Decide');
+  const iIgn = md.indexOf('## Ignore');
+  assert.ok(iImpl > -1 && iDec > -1 && iIgn > -1, 'all three headings present');
+  assert.ok(iImpl < iDec && iDec < iIgn, 'sections in Implement -> Decide -> Ignore order');
+});
+
+test('renderProposal: tables carry Notes and Score columns', () => {
+  const md = renderProposal({ scope: 'Vault-wide', date: '2026-06-25', clusters: PROPOSAL_SAMPLE });
+  assert.match(md, /\| Notes \| Score \|/);
+  assert.match(md, /`Phase0` \(12\)/);   // per-child count inline
+  assert.match(md, /\| 21 \| 85 \|/);    // Phase row: notesTotal + score
+});
+
+test('renderProposal: summary shows the three-way distribution', () => {
+  const md = renderProposal({ scope: 'Vault-wide', date: '2026-06-25', clusters: PROPOSAL_SAMPLE });
+  assert.match(md, /Implement 1 . Decide 1 . Ignore 1/);
+});
+
+test('renderProposal: an empty category renders a "(none)" line, not a broken table', () => {
+  const onlyImpl = [PROPOSAL_SAMPLE[0]];
+  const md = renderProposal({ scope: 'Vault-wide', date: '2026-06-25', clusters: onlyImpl });
+  const decIdx = md.indexOf('## Decide');
+  const ignIdx = md.indexOf('## Ignore');
+  assert.match(md.slice(decIdx, ignIdx), /\(none\)/);
+});
+
+test('renderProposal: rows within a section are sorted by score descending', () => {
+  const clusters = [
+    { parent: 'Low', children: [{ name: 'LowA', count: 1 }, { name: 'LowB', count: 1 }], notesTotal: 2, score: 45, category: 'decide', basis: 'base' },
+    { parent: 'Market', children: [{ name: 'MarketA', count: 9 }, { name: 'MarketB', count: 9 }], notesTotal: 18, score: 60, category: 'decide', basis: 'freq' },
+  ];
+  const md = renderProposal({ scope: 'Vault-wide', date: '2026-06-25', clusters });
+  assert.ok(md.indexOf('`Market`') < md.indexOf('`Low`'), 'higher score first');
 });
