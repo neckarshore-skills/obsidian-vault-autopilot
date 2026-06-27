@@ -1,7 +1,7 @@
 'use strict';
 // convention.js — deterministic tag-convention classification + canonical resolver.
 // Pure: no fs, no clock. Mirrors the predecessor's Step 3.5 (first matching rule wins).
-const { logicalKey } = require('./tags.js');
+const { logicalKey, stripSeparators } = require('./tags.js');
 
 const YAML_FIELD_RE = /^(created|modified|last_updated|updated|date|aliases?|status|type)\s*:/i;
 
@@ -40,6 +40,12 @@ function canonicalForm(tag, dict) {
   const key = logicalKey(tag);
   if (dict.brands.has(key)) return { canonical: dict.brands.get(key), source: 'brand' };
   if (dict.compounds.has(key)) return { canonical: dict.compounds.get(key), source: 'compound' };
+  // Separator-insensitive fallback: a no-separator variant (`mercedesbenz`,
+  // `MercedesBenz`) resolves to its hyphenated dictionary canonical (`Mercedes-Benz`).
+  // Brand wins over compound (mirrors the direct-lookup precedence above).
+  const sk = stripSeparators(key);
+  if (dict.brandStripped && dict.brandStripped.has(sk)) return { canonical: dict.brandStripped.get(sk), source: 'brand' };
+  if (dict.compoundStripped && dict.compoundStripped.has(sk)) return { canonical: dict.compoundStripped.get(sk), source: 'compound' };
   return { canonical: pascalHeuristic(tag), source: 'heuristic' };
 }
 

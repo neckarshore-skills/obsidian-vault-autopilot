@@ -26,6 +26,13 @@ function logicalKey(tag) {
   return String(tag).replace(/^#/, '').toLowerCase();
 }
 
+// Separator-insensitive form: drop `-`, `_`, and whitespace. Lets a no-separator
+// brand/compound variant (`MercedesBenz`) match its hyphenated dictionary key
+// (`mercedes-benz`). Used only for dictionary lookup, never for storage.
+function stripSeparators(s) {
+  return String(s).replace(/[-_\s]/g, '');
+}
+
 function isReserved(tag) {
   return RESERVED_TAGS.has(logicalKey(tag));
 }
@@ -482,7 +489,7 @@ function auditFindings(notes) {
 
 module.exports = {
   RESERVED_TAGS, SurvivalError,
-  logicalKey, isReserved, isValidTag,
+  logicalKey, stripSeparators, isReserved, isValidTag,
   splitFrontmatter, cleanTagValue,
   bodyTags, scanBody, frontmatterTags, frontmatterTagsFromLines, noteTags,
   compileOps, applyOps, assertSurvival,

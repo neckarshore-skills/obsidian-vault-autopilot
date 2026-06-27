@@ -25,6 +25,24 @@ test('uniform-lowercase brand is enforced to official casing (no mixed variant n
   assert.deepEqual(r.ops, [{ type: 'rename', from: 'github', to: 'GitHub' }]);
 });
 
+test('separator variant of a hyphenated brand folds to canonical (Finding C)', () => {
+  const d = mergeOverrides({ brands: { 'mercedes-benz': 'Mercedes-Benz' } }, {});
+  const notes = [
+    { path: 'a.md', text: '---\ntags:\n  - Mercedes-Benz\n---\n' },  // already canonical
+    { path: 'b.md', text: '---\ntags:\n  - MercedesBenz\n---\n' },   // no-separator variant
+    { path: 'c.md', text: '---\ntags:\n  - mercedes_benz\n---\n' },  // underscore variant
+  ];
+  const recs = buildRecommendations(buildInventory(notes), d);
+  assert.ok(!recs.some((x) => x.ops.some((o) => o.from === 'mercedes-benz')), 'the hyphenated form is canonical -> no rec');
+  const noSep = recs.find((x) => x.ops.some((o) => o.from === 'mercedesbenz'));
+  assert.ok(noSep, 'MercedesBenz gets a fold rec');
+  assert.equal(noSep.to, 'Mercedes-Benz');
+  assert.equal(noSep.source, 'brand');
+  const underscore = recs.find((x) => x.ops.some((o) => o.from === 'mercedes_benz'));
+  assert.ok(underscore, 'mercedes_benz gets a fold rec');
+  assert.equal(underscore.to, 'Mercedes-Benz');
+});
+
 test('a compliant AI-ML (dictionary-backed) gets NO recommendation', () => {
   const d = require('../scripts/config.js').mergeOverrides({ compounds: { 'ai-ml': 'AI-ML' } }, {});
   const notes = [{ path: 'a.md', text: '---\ntags:\n  - AI-ML\n---\n' }];
