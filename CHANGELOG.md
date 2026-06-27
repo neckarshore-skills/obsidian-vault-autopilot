@@ -8,6 +8,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 For implementation detail and internal release notes, see [`logs/changelog.md`](logs/changelog.md).
 
+## [0.3.0] — 2026-06-27
+
+### Added
+
+- **Canonical property order.** `property-enrich` now finalizes frontmatter into a consistent, human-readable order — `title` first, `description` second, then `type`/`status`/`created`/`modified`, your custom fields, and `tags` always last. The reorder moves each property as a whole unit (a key plus its list items or multi-line value), so list items are never orphaned. It is idempotent (a note already in order is left untouched) and configurable via `property_order`.
+- **`modified` carries a time.** `property-enrich` now writes `modified` as `YYYY-MM-DD HH:MM` instead of date-only, so it stays greppable and renders as text in Obsidian rather than a date-picker widget.
+
+### Fixed
+
+- **Tag separator variants now fold together.** A brand or compound tag written without its separator now merges into the canonical form: `MercedesBenz` / `mercedes_benz` → `Mercedes-Benz`, `AIML` → `AI-ML`. Previously these survived tag cleanup because matching required the exact hyphenated spelling.
+- **Tag-organize keeps brand names whole.** A family of LinkedIn tags is now proposed under the parent `LinkedIn` instead of the truncated `Linked` (the name builder split the brand at its internal capital letter). Applies to internal-capital brands generally (ChatGPT, FastAPI, …).
+
+### Changed
+
+- **The plugin now meets its own frontmatter standard.** Report notes the plugin writes into your vault carry `title` + `description` + `tags` in canonical order. The machine-read findings ledger (`_vault-autopilot/findings/`) keeps its minimal schema as a documented, intentional exception (it is data storage, not a human-facing note).
+- **Tag organization matured.** The tag-organize workflow that developed across the 0.2.x line — the browsable proposal note, the Implement / Decide / Ignore confidence triage with per-family note counts, and declared-hierarchy nesting — is consolidated under this release.
+
 ## [0.1.5] — 2026-05-07
 
 ### Added

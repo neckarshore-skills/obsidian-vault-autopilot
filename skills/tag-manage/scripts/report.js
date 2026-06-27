@@ -97,7 +97,7 @@ function renderFindings(f, a) {
 
 function renderReport({ scope, date, analysis: a, findings: f, recommendations: recs, healthScore: h, nestRecommendations: nest = [] }) {
   const lines = [];
-  lines.push(`---\ntitle: 'Tag Analysis Report - ${scope} - ${date}'\ntype: inbox\nstatus: draft\ncreated: ${date}\ntags:\n  - ${REPORT_MARKER_TAG}\n---\n`);
+  lines.push(`---\ntitle: 'Tag Analysis Report - ${scope} - ${date}'\ndescription: 'Automated tag audit by Obsidian Vault Autopilot.'\ntype: inbox\nstatus: draft\ncreated: ${date}\ntags:\n  - ${REPORT_MARKER_TAG}\n---\n`);
   lines.push(`# Tag Analysis Report\n`);
   lines.push(`> [!summary]\n> **Scope:** ${scope}\n> **Analyzed:** ${fmt(a.totalNotes)} notes, ${fmt(a.uniqueTags)} unique tags, ${fmt(a.totalAssignments)} assignments\n> **Coverage:** ${h.coveragePct}% tagged\n> **Recommendations:** ${fmt(recs.length)}\n`);
   lines.push(`## Key Metrics\n\n` + table(['Metric', 'Value'], [
@@ -161,7 +161,7 @@ function renderProposal({ scope, date, clusters }) {
   };
 
   const lines = [];
-  lines.push(`---\ntitle: 'Tag Organize Proposal - ${scope} - ${date}'\ntype: inbox\nstatus: draft\ncreated: ${date}\ntags:\n  - ${REPORT_MARKER_TAG}\n---\n`);
+  lines.push(`---\ntitle: 'Tag Organize Proposal - ${scope} - ${date}'\ndescription: 'Proposed tag hierarchy by Obsidian Vault Autopilot.'\ntype: inbox\nstatus: draft\ncreated: ${date}\ntags:\n  - ${REPORT_MARKER_TAG}\n---\n`);
   lines.push(`# Tag Organize Proposal\n`);
   lines.push(`> [!summary]\n> **Scope:** ${scope}\n> **Candidate families:** ${fmt(clusters.length)} -> Implement ${counts.implement} . Decide ${counts.decide} . Ignore ${counts.ignore}\n> Score = structural signal strength (not a probability) — see Basis. Implement is a recommended batch, still applied behind the confirm gate; nothing is auto-applied.\n`);
   for (const c of CATS) lines.push(section(c));

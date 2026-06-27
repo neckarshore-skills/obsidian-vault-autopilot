@@ -1,8 +1,25 @@
-const { classifyTag } = require('../scripts/convention.js');
+const { classifyTag, canonicalForm } = require('../scripts/convention.js');
+const { mergeOverrides } = require('../scripts/config.js');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const ctx = { brandSet: new Set(['n8n', 'github']), brandHyphenSet: new Set(['mercedes-benz']), hierarchicalLeaves: new Set(['devtools']) };
+
+// Finding C: separator-insensitive brand/compound resolution.
+test('canonicalForm: no-separator + underscore variants resolve to the hyphenated brand canonical', () => {
+  const d = mergeOverrides({ brands: { 'mercedes-benz': 'Mercedes-Benz' } }, {});
+  assert.deepEqual(canonicalForm('Mercedes-Benz', d), { canonical: 'Mercedes-Benz', source: 'brand' });
+  assert.deepEqual(canonicalForm('MercedesBenz', d), { canonical: 'Mercedes-Benz', source: 'brand' });
+  assert.deepEqual(canonicalForm('mercedes_benz', d), { canonical: 'Mercedes-Benz', source: 'brand' });
+});
+test('canonicalForm: separator-insensitive also applies to hyphenated compounds', () => {
+  const d = mergeOverrides({ compounds: { 'ai-ml': 'AI-ML' } }, {});
+  assert.deepEqual(canonicalForm('AIML', d), { canonical: 'AI-ML', source: 'compound' });
+});
+test('canonicalForm: an unknown tag still falls through to the heuristic', () => {
+  const d = mergeOverrides({ brands: { 'mercedes-benz': 'Mercedes-Benz' } }, {});
+  assert.equal(canonicalForm('SomethingElse', d).source, 'heuristic');
+});
 
 test('hashtag-prefix is HIGH', () => assert.deepEqual(classifyTag('#research', ctx), { violation: 'hashtag-prefix', severity: 'HIGH' }));
 test('numeric-artifact is HIGH', () => assert.deepEqual(classifyTag('2026', ctx), { violation: 'numeric-artifact', severity: 'HIGH' }));
@@ -22,8 +39,7 @@ test('brand stays compliant lowercase', () => assert.deepEqual(classifyTag('n8n'
 test('brand-hyphen is allowed', () => assert.deepEqual(classifyTag('Mercedes-Benz', ctx), { violation: null, severity: null }));
 test('compliant PascalCase passes', () => assert.deepEqual(classifyTag('OpenSource', ctx), { violation: null, severity: null }));
 
-// canonicalForm tests (Task 3)
-const { canonicalForm } = require('../scripts/convention.js');
+// canonicalForm tests (Task 3) — canonicalForm imported at top
 const dict = { brands: new Map([['github', 'GitHub']]), compounds: new Map([['lowcode', 'LowCode'], ['low-code', 'LowCode']]) };
 
 test('brand hit uses official casing', () => assert.deepEqual(canonicalForm('github', dict), { canonical: 'GitHub', source: 'brand' }));

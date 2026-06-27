@@ -33,17 +33,45 @@ function firstTokenEnd(tag) {
   return tag.length;
 }
 
-function leadingSegment(tag) {
-  return tag.slice(0, firstTokenEnd(tag));
+// True when ch ends a leading token: end-of-string, a separator, a digit, or an
+// uppercase letter (the start of the next camelCase word).
+function isBoundaryChar(ch) {
+  return ch === undefined || ch === '-' || ch === '_' || ch === '/' || /[0-9]/.test(ch) || /\p{Lu}/u.test(ch);
 }
 
-function tokenizeTag(tag) {
+// The leading unit of a tag = { end, display }. Normally the raw slice up to the
+// default boundary. But a KNOWN brand that prefixes the tag, is LONGER than the
+// default split, and is followed by a boundary overrides it — so an internal-camelCase
+// brand (LinkedIn, ChatGPT, FastAPI) stays whole instead of splitting mid-name
+// (LinkedInMarketing -> "LinkedIn", not "Linked"). Purely additive: it NEVER shortens
+// the default token, so short brands (ai, ui, qa) are inert. `brands` is a Map of
+// lowercased brand key -> canonical display.
+function leadingUnit(tag, brands) {
+  const def = firstTokenEnd(tag);
+  if (brands && brands.size) {
+    const lower = tag.toLowerCase();
+    let best = null;
+    for (const [b, display] of brands) {
+      if (b.length > def && lower.startsWith(b) && isBoundaryChar(tag[b.length])) {
+        if (!best || b.length > best.len) best = { len: b.length, display };
+      }
+    }
+    if (best) return { end: best.len, display: best.display };
+  }
+  return { end: def, display: tag.slice(0, def) };
+}
+
+function leadingSegment(tag, brands) {
+  return leadingUnit(tag, brands).display;
+}
+
+function tokenizeTag(tag, brands) {
   const tokens = [];
   let rest = tag;
   while (rest.length) {
-    const seg = leadingSegment(rest);
-    if (seg) tokens.push(seg.toLowerCase());
-    let next = rest.slice(seg.length);
+    const { end, display } = leadingUnit(rest, brands);
+    if (display) tokens.push(display.toLowerCase());
+    let next = rest.slice(end);        // slice by matched length (robust if display re-cased)
     next = next.replace(/^[-_/]/, ''); // drop the boundary separator
     if (next === rest) break;          // safety: no progress
     rest = next;
@@ -67,12 +95,13 @@ function mode(strings) {
 // Sorted by member count desc, then parent A->Z.
 function clusterByName(inventory, opts = {}) {
   const minMembers = opts.minMembers || 2;
+  const brands = opts.brands; // Map lowercased-key -> canonical display (keeps brands whole)
   const families = new Map(); // stem token -> array of entries
   for (const e of inventory) {
     if (isReserved(e.key)) continue;
     if (e.key.includes('/')) continue;            // already nested -> convergence
     const display = e.variants[0] || e.key;
-    const tokens = tokenizeTag(display);
+    const tokens = tokenizeTag(display, brands);
     if (tokens.length < 2) continue;              // single-token tag is not a family member
     const stem = tokens[0];
     // A one-character or purely-numeric leading token is never a meaningful parent
@@ -86,7 +115,7 @@ function clusterByName(inventory, opts = {}) {
   for (const [stem, entries] of families) {
     const distinct = [...new Map(entries.map((e) => [logicalKey(e.variants[0] || e.key), e])).values()];
     if (distinct.length < minMembers) continue;
-    const parent = mode(distinct.map((e) => leadingSegment(e.variants[0] || e.key)));
+    const parent = mode(distinct.map((e) => leadingSegment(e.variants[0] || e.key, brands)));
     const children = distinct
       .map((e) => ({ name: e.variants[0] || e.key, count: e.noteCount || 0 }))
       .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase())); // A->Z, case-insensitive

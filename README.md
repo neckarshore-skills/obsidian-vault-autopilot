@@ -25,7 +25,7 @@ Four skills that manage your vault automatically:
 |---|-------|-------------|--------|
 | 1 | **inbox-sort** | Moves notes from inbox root into existing subfolders based on content | ✅ stable |
 | 2 | **note-rename** | Renames poorly named files and updates all backlinks | ✅ stable |
-| 3 | **property-enrich** | Fills missing metadata: title, dates, aliases, source, priority | ✅ stable |
+| 3 | **property-enrich** | Fills missing metadata (title, dates, aliases, source, priority) and finalizes frontmatter into a canonical, readable order (`title` first … `tags` last); `modified` carries a `HH:MM` timestamp | ✅ stable |
 | 4 | **property-describe** | Generates concise `description` frontmatter from note content | 🧪 beta |
 
 The **🧪 beta** skill is usable today with caveats — behavior may still change before v1.0. All four skills have been validated across multiple vault topologies (macOS native, Windows clone, PowerShell clone, robocopy clone).

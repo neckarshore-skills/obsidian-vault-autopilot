@@ -1,0 +1,86 @@
+# Spec — Canonical Property Order + Self-Output Consistency
+
+**Status:** APPROVED 2026-06-27 (user) — building this release. Spec-first per user decision 2026-06-25.
+**Repo:** obsidian-vault-autopilot
+**Build note (2026-06-27):** the cited `scratchpad/finalize_batch1.py` reference impl was never committed (verified via `git log --all`), so the algorithm is UNPROVEN in-repo. The golden fixtures (not the spec prose) are the proof. Scope is held to D5: recipe-g + `property-enrich` applies it + the report self-output fix — NOT propagated to note-rename/inbox-sort/classify/describe (deferred per D5).
+
+## Problem
+
+1. **No canonical property order.** `references/yaml-edits.md` recipe-c appends every new field at the END of frontmatter ("order-insignificant for YAML; appending is safe"). No skill reorders. Result: `title` lands at the bottom, `tags` wherever — poor human readability.
+2. **Self-output violates own standard (user observation 2026-06-25).** OVA's own files in `_vault-autopilot/` (findings, reports) carry minimal frontmatter (`date, skill, scope, counts/mode`) — no `title`/`description`/`tags`, not canonical order. They escape detection only because `_`-prefixed paths are protected from scans. Dogfooding gap.
+
+## User decisions (2026-06-25)
+
+- D1: Spec-first, then build.
+- D2: Fully fixed canonical order (not just title/description/tags anchors).
+
+## Proposed canonical order (DEFAULT, configurable via `property_order`)
+
+| # | Property | Group | Notes |
+|---|----------|-------|-------|
+| 1 | title | lead | always first |
+| 2 | description | lead | always second |
+| 3 | type | lead | property-classify |
+| 4 | status | lead | property-classify |
+| 5 | created | lead | property-enrich |
+| 6 | modified | lead | property-enrich; carries timestamp `YYYY-MM-DD HH:MM` |
+| 7 | aliases | relational | v0.2.0 |
+| 8 | source | relational | v0.2.0 |
+| 9 | parent | relational | v0.2.0 |
+| 10 | priority | relational | v0.2.0 |
+| 11 | *(custom / unknown)* | middle | preserved in original relative order |
+| 12 | tags | trailer | always last |
+
+- **Lead block** = logical-lead exception (per user's A->Z global rule: a deliberate logical block may lead).
+- **Unknown/custom properties** (e.g. `version`, `up`, `related`, `period`) keep their original relative order, placed between the known relational block and `tags`. OPEN: should specific customs (`up`, `related`) get fixed slots?
+- **`tags` trailer** = symmetric-trailer exception.
+
+## modified timestamp
+
+`modified` MUST be written as `YYYY-MM-DD HH:MM` (not date-only) so an enrichment run is greppable and Obsidian renders it as text (not a Date-type widget). Change to `references/skill-log.md` / property-enrich.
+
+## Ownership
+
+- **New shared recipe** `references/yaml-edits.md` recipe-(g) "canonical property order" — block-aware reorder (key line + its list items move as a unit), config-driven, idempotent. (Reference implementation already proven: `scratchpad/finalize_batch1.py` block-aware parser — 0 data loss, 0 orphans, idempotent on 61 real notes.)
+- **Applied by** property-enrich at write-time (Step 5/6). Adoptable later by note-rename, inbox-sort, property-classify, property-describe so all frontmatter writers converge.
+- Reverses recipe-c's "append-at-end is safe" stance for the final layout (append-then-reorder). Recipe-c stays the safe insert primitive; recipe-g is the finalize pass.
+
+## Self-output consistency (the dogfooding fix)
+
+Per user's R3 (Storage vs Presentation):
+- **findings/** = **Storage** (machine-parsed by Obi on session start). Minimal schema (`date/skill/scope/counts`) is CORRECT for Storage. RESOLUTION: document it as an intentional management-schema exception in `references/findings-file.md`; do NOT force title/description/tags. It is exempt because it is Storage, not because it is protected.
+- **reports/** = **Presentation** (human-facing Markdown). RESOLUTION: reports SHOULD conform — add `title`, `description`, `tags` (incl. a `VaultAutopilot`/management tag) in canonical order, so OVA's human-facing output meets its own standard.
+- Net principle to codify: *"`_vault-autopilot/` is protected from scanning, but OVA's Presentation output must still satisfy the canonical frontmatter standard. Storage output follows its documented machine schema."*
+
+## Config
+
+- `property_order`: ordered list, default = table above. Configurable per the "opinionated defaults, configurable everything" principle.
+- `modified_timestamp`: bool, default true.
+
+## Test cases (TDD)
+
+1. Missing title -> ends up FIRST, not appended last.
+2. tags (block, inline, scalar) -> single block, LAST.
+3. description present -> SECOND.
+4. Custom props (version, up, related) -> preserved order, before tags.
+5. Block-field reorder (aliases/up) -> items stay under their key (no orphans). [regression-lock for the orphan bug from 2026-06-25]
+6. Idempotency: second run = 0 byte changes.
+7. modified written with HH:MM timestamp.
+8. Report file generated by a skill -> has title/description/tags in canonical order.
+9. Findings file -> retains machine schema (no false "missing title" finding against itself).
+10. Birthtime preserved across the reorder write.
+
+## Resolved decisions (2026-06-25)
+
+- D3: Custom properties (`up`, `related`, `version`, `period`) stay **preserved-middle** (original relative order between relational block and `tags`); `property_order` config can fix specific ones later without a code change.
+- D4: OVA report files get a distinct tag **`VaultAutopilot/report`** (nested), so they do NOT merge into the "real notes touched by automation" tag filter.
+- D5: Rollout = **property-enrich first** (build + TDD recipe-g there), then propagate to note-rename, inbox-sort, property-classify, property-describe.
+
+## Build scope (on approval)
+
+1. `references/yaml-edits.md` — add recipe-(g) canonical-order (block-aware, idempotent, config-driven, birthtime-preserving).
+2. `skills/property-enrich/SKILL.md` — apply recipe-g at write-time (Step 5/6); `modified` timestamp `YYYY-MM-DD HH:MM`.
+3. `references/findings-file.md` — document the Storage management-schema exception.
+4. Report-writing path — emit `title`/`description`/`tags: [VaultAutopilot/report]` in canonical order.
+5. Config — `property_order` (default = table above), `modified_timestamp` (default true).
+6. Tests/fixtures — the 10 cases above, incl. the orphan-bug regression-lock.

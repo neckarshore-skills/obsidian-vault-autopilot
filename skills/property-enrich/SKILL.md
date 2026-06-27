@@ -38,7 +38,14 @@ Never process or modify these files (see `references/vault-autopilot-note.md`):
 |----------|--------|-----------|
 | `title` | First H1 heading, fallback: filename without `.md` | Never |
 | `created` | Source Hierarchy (see below) | Never |
-| `modified` | Filesystem mtime | **Always** (refreshed on every write) |
+| `modified` | Filesystem mtime, written as `YYYY-MM-DD HH:MM` | **Always** (refreshed on every write) |
+
+### Canonical property order
+
+After all field writes, frontmatter is reordered into a canonical, human-readable order via `references/yaml-edits.md` recipe (g): `title` → `description` → `type` → `status` → `created` → `modified` → `aliases` → `source` → `parent` → `priority` → *(custom keys, original order)* → `tags` (last). Recipe (c) inserts safely (append-at-end); recipe (g) is the finalize pass that produces the canonical layout. The reorder moves each property as an atomic unit (key line + its list items / folded body) — it never orphans a list item.
+
+- `modified` is written with a `HH:MM` time component (not date-only) so an enrichment run is greppable and Obsidian renders it as text, not a Date-type widget.
+- **Config:** `property_order` (ordered list, default = the order above) and `modified_timestamp` (bool, default `true`) are overridable per the "opinionated defaults, configurable everything" principle.
 
 ### `created` Source Hierarchy
 
@@ -95,6 +102,7 @@ Run the checks freshly each time. Do not assume a previous turn's pass result st
 4. **Preview** — summary table with sample changes including Source column. Wait for confirmation.
 5. **Write** — pre-write, call `references/yaml-sanity.md` again as defense-in-depth (sanity-check is idempotent — repeated calls are no-ops if Step 2a already normalized). Add fields using line-by-line YAML edits per `references/yaml-edits.md`. Never use `str.replace`. Never use multi-line regex with `(?s)` or `.+`/`.*` against newline-spanning input. New fields are inserted as new lines immediately before the closing `---` (recipe c). List-field appends (e.g. `tags:`) follow recipe d in `references/yaml-edits.md` § "Append to a list field". Preserve all existing field values.
 6. **Skill Log** — for each enriched file: add `VaultAutopilot` tag and append skill log callout row (see `references/skill-log.md`). Action format: `Added [field list] (created source: [source])`. YAML tag-list edits and skill-log callout edits MUST follow `references/yaml-edits.md` (recipes d + e).
+   - **6a. Finalize canonical property order (recipe g).** After all frontmatter inserts (Step 5 fields + the Step 6 `VaultAutopilot` tag), reorder the frontmatter into canonical order per `references/yaml-edits.md` recipe (g) — `title` first … `tags` last. Apply it line-by-line per the recipe, or invoke the proven reference impl `scripts/validate-recipe-g.py` (`--file <note>` prints the reordered text). The reorder moves each property as an atomic unit (no orphaned list items), is idempotent (already-canonical notes are a zero-diff no-op), and preserves birthtime by writing in place (recipe a write-back). No-op when `property_order` is configured empty.
 7. **Write findings file** — for any non-trivial Findings (Class A/B/C/D as defined in `references/findings-file.md`), append a section to `<VAULT>/_vault-autopilot/findings/<YYYY-MM-DD>-property-enrich.md`. Create the folder chain if missing. Never edit prior findings — append-only ledger.
 8. **Report and log** — append to `logs/run-history.md`.
 
@@ -114,8 +122,8 @@ Run the checks freshly each time. Do not assume a previous turn's pass result st
 
 | # | Note | title | created | Source | modified | Findings |
 |---|------|-------|---------|--------|----------|----------|
-| 1 | Budget Review.md | Budget Review | 2024-06-15 | filename | 2026-04-13 | — |
-| 2 | Architecture.md | Architecture | 2025-11-20 | git | 2026-04-13 | — |
+| 1 | Budget Review.md | Budget Review | 2024-06-15 | filename | 2026-04-13 14:32 | — |
+| 2 | Architecture.md | Architecture | 2025-11-20 | git | 2026-04-13 14:32 | — |
 
 - Notes enriched: X | Already complete: X | Skipped (no valid date): X
 
@@ -132,6 +140,8 @@ Run the checks freshly each time. Do not assume a previous turn's pass result st
 ## Quality Check
 
 - [ ] No existing property values were overwritten (except `modified`)
+- [ ] Frontmatter finalized into canonical property order (recipe g) — `title` first, `tags` last, no orphaned list items
+- [ ] `modified` written with `HH:MM` time component (`YYYY-MM-DD HH:MM`), not date-only
 - [ ] `created` Source Hierarchy was followed (filename > git > birthtime)
 - [ ] Source column in report shows derivation per note
 - [ ] Preview shown and confirmed before writing

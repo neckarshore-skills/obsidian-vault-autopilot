@@ -250,11 +250,12 @@ function resolveReportContext(target, rest) {
 // by walkMarkdown -> no self-poisoning). The agent reviews the proposal, reads content
 // only for uncertain families, then persists approved clusters via set-hierarchy; the
 // nest itself rides the existing applyOps path (no new write code in Slice 1).
-function runInduce(dir, { reportDirAbs, date, fileStamp = '', scope = 'Vault-wide', declaredParents = [] } = {}) {
+function runInduce(dir, { reportDirAbs, date, fileStamp = '', scope = 'Vault-wide', declaredParents = [], brands } = {}) {
   // Exclude report artifacts before scanning — mirrors runAudit (matters when reportDir is
   // a non-underscore dir that walkMarkdown would otherwise scan, incl. a prior proposal note).
   const inventory = buildInventory(excludeReportArtifacts(readNotes(dir), dir, reportDirAbs));
-  const clusters = clusterByName(inventory).map((c) => ({ ...c, ...scoreCluster(c, { declaredParents }) }));
+  // brands keeps internal-camelCase brand names whole (LinkedIn, not Linked) for parent naming.
+  const clusters = clusterByName(inventory, { brands }).map((c) => ({ ...c, ...scoreCluster(c, { declaredParents }) }));
   const outDir = reportDirAbs || dir;
   fs.mkdirSync(outDir, { recursive: true }); // ensure the report home exists before any write
   const outPath = path.join(outDir, '.tag-organize-clusters.json');
@@ -305,7 +306,7 @@ if (require.main === module) {
       const { defaultsPath, configText, reportDirAbs, date, fileStamp } = resolveReportContext(target, rest);
       const dict = loadConfig({ defaultsPath, configText });
       const declaredParents = Object.keys(dict.hierarchy || {});
-      const { clusters, outPath, notePath } = runInduce(target, { reportDirAbs, date, fileStamp, declaredParents });
+      const { clusters, outPath, notePath } = runInduce(target, { reportDirAbs, date, fileStamp, declaredParents, brands: dict.brands });
       const byCat = { implement: 0, decide: 0, ignore: 0 };
       for (const c of clusters) byCat[c.category] = (byCat[c.category] || 0) + 1;
       console.error(`induce: ${clusters.length} candidate ${clusters.length === 1 ? 'family' : 'families'} proposed (implement ${byCat.implement} / decide ${byCat.decide} / ignore ${byCat.ignore}) -> ${outPath}`);

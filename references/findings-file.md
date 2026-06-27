@@ -6,6 +6,17 @@ When a skill encounters something the user should know about — a corrupted not
 
 This file defines the vault-side findings convention: a ledger written into the vault itself, append-only, that any skill can write and any future Obi session can read.
 
+## Storage vs Presentation — OVA self-output standard
+
+OVA enforces a canonical frontmatter standard on the user's notes (`title`/`description`/`tags`, canonical property order — see `references/yaml-edits.md` recipe (g)). Its own output under `_vault-autopilot/` must be honest about that standard, not silently escape it via the `_*` scan-exclusion. The rule follows the Storage-vs-Presentation split:
+
+| OVA output | Class | Frontmatter standard |
+|------------|-------|----------------------|
+| `_vault-autopilot/findings/*.md` | **Storage** (machine-parsed by Obi on session start) | The documented machine schema below (`date`/`skill`/`scope`/`counts`). **Intentionally exempt** from `title`/`description`/`tags` — exempt because it is Storage, NOT because the path is protected. A skill must never flag a findings file as "missing title". |
+| Report notes (e.g. tag-manage `Tag Analysis Report - *.md`) | **Presentation** (human-facing Markdown) | MUST satisfy the canonical standard: `title` + `description` + `tags` in canonical order. These reports already carry a distinct marker tag (`Meta/TagManagement`) so they do NOT merge into the `VaultAutopilot`-touched-notes filter. |
+
+**Net principle:** `_vault-autopilot/` is protected from scanning, but OVA's *Presentation* output must still satisfy the canonical frontmatter standard. OVA's *Storage* output follows its documented machine schema and is an explicit, documented exception — not an accidental one.
+
 ## Path
 
 ```

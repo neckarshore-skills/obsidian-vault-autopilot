@@ -22,6 +22,48 @@ test('leadingSegment returns the first token in its original display casing', ()
   assert.equal(leadingSegment('investing'), 'investing');
 });
 
+// Bug 2: a known internal-camelCase brand is kept whole for parent naming.
+const BRANDS = new Map([['linkedin', 'LinkedIn'], ['chatgpt', 'ChatGPT'], ['ai', 'AI']]);
+
+test('brand-aware leadingSegment keeps LinkedIn whole (not "Linked")', () => {
+  assert.equal(leadingSegment('LinkedIn', BRANDS), 'LinkedIn');
+  assert.equal(leadingSegment('LinkedInMarketing', BRANDS), 'LinkedIn');
+  assert.equal(leadingSegment('ChatGPTPrompts', BRANDS), 'ChatGPT');
+  // without the brand map, the old split still applies (backward compatible)
+  assert.equal(leadingSegment('LinkedInMarketing'), 'Linked');
+});
+
+test('brand-aware tokenizeTag splits after the whole brand', () => {
+  assert.deepEqual(tokenizeTag('LinkedInMarketing', BRANDS), ['linkedin', 'marketing']);
+  assert.deepEqual(tokenizeTag('LinkedIn', BRANDS), ['linkedin']);
+});
+
+test('short brand is INERT — never shortens the default token (ai does not hijack)', () => {
+  // "ai" (len 2) is not longer than any default split, so it never overrides.
+  assert.equal(leadingSegment('Aid', BRANDS), 'Aid');          // not "ai"
+  assert.equal(leadingSegment('AIAgents', BRANDS), leadingSegment('AIAgents')); // unchanged by brands
+});
+
+test('clusterByName with brands names the parent LinkedIn (Bug 2)', () => {
+  const inventory = [
+    inv('LinkedIn', 94), inv('LinkedInMarketing', 12), inv('LinkedInOutreach', 8),
+  ];
+  const [family] = clusterByName(inventory, { brands: BRANDS });
+  assert.equal(family.parent, 'LinkedIn');
+  // bare "LinkedIn" is a single token -> the parent itself, not a child; only the
+  // two-token members nest under it.
+  assert.equal(family.children.length, 2);
+  assert.deepEqual(family.children.map((c) => c.name), ['LinkedInMarketing', 'LinkedInOutreach']);
+});
+
+test('clusterByName WITHOUT brands reproduces the old truncated parent (regression baseline)', () => {
+  const inventory = [
+    inv('LinkedIn', 94), inv('LinkedInMarketing', 12), inv('LinkedInOutreach', 8),
+  ];
+  const [family] = clusterByName(inventory);
+  assert.equal(family.parent, 'Linked'); // the bug, pinned as the no-dict baseline
+});
+
 test('clusterByName groups flat tags sharing a leading token into a family', () => {
   const inventory = [
     inv('business-strategy', 3, ['Business-Strategy']),

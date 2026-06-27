@@ -21,6 +21,23 @@ test('renderReport is deterministic and contains key sections', () => {
   assert.equal(md, renderReport(data)); // deterministic
 });
 
+test('renderReport frontmatter is canonical: title, description, then tags last (self-output standard)', () => {
+  const md = renderReport(data);
+  assert.match(md, /description: 'Automated tag audit by Obsidian Vault Autopilot\.'/);
+  const ti = md.indexOf('title:');
+  const di = md.indexOf('description:');
+  const tagsI = md.indexOf('tags:');
+  assert.ok(ti >= 0 && di >= 0 && tagsI >= 0, 'title/description/tags all present');
+  assert.ok(ti < di, 'title before description');
+  assert.ok(di < tagsI, 'description before tags (tags is the trailer)');
+});
+
+test('renderProposal frontmatter carries a description (self-output standard)', () => {
+  const md = renderProposal({ scope: 'Vault-wide', date: '2026-06-20', clusters: [] });
+  assert.match(md, /description: 'Proposed tag hierarchy by Obsidian Vault Autopilot\.'/);
+  assert.ok(md.indexOf('title:') < md.indexOf('description:'), 'title before description');
+});
+
 // --- Findings section tests ---
 
 const richData = {
