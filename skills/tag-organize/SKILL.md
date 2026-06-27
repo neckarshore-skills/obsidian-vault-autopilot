@@ -1,5 +1,6 @@
 ---
 name: tag-organize
+status: beta
 description: Use when an Obsidian vault's flat tags should be organized into a nested hierarchy by proposing parent/child families over EXISTING tags. Trigger phrases - "organize tags", "tag hierarchy", "group my tags", "tag structure", "nest my flat tags", "tag optimization", "restructure tags", "structure my tags". Runs AFTER tag-manage cleanup (hygiene first). Slice 1 proposes structure over existing tags only; it does NOT invent tags from note content (that is the later auto-tag slice, not yet built).
 ---
 

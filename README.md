@@ -42,18 +42,19 @@ It automates your vault. Nobody else does that.
 
 ## On the Roadmap
 
-Three additional skills are on the roadmap. They live in the codebase but
-have not been validated at the same coverage as the four launch-scope
-skills above.
+Five additional skills ship in the codebase but have not been validated at the
+same coverage as the four launch-scope skills above. They are usable today with
+caveats (beta) — behavior may still change before v1.0.
 
 **In preview** (usable today with caveats, not yet Gold-Run validated):
 
-| # | Skill | What it does | Target |
+| # | Skill | What it does | Status |
 |---|-------|-------------|--------|
-| 1 | note-quality-check | Scores notes by quality, recommends what to keep or delete | v0.2.x |
-| 2 | property-classify | Sets lifecycle `status` and `type` properties automatically | v0.2.x |
-| 3 | tag-manage | Audits existing tags; scores against PascalCase convention (severity-classified); renames, merges, and removes duplicates / case variants / convention violations behind a preview-and-confirm gate with a rich vault-written report | v0.1.7 |
-| 4 | tag-organize | Organizes flat tags into a nested hierarchy — AI-proposed parent/child families over existing tags, scored and split into Implement / Decide / Ignore (with per-family note-counts) in a browsable proposal note so you triage by confidence and impact, applied behind a confirm gate (Slice 1: structure only, no auto-tagging yet) | v0.2.x |
+| 1 | note-quality-check | Scores notes by quality, recommends what to keep or delete | beta |
+| 2 | property-classify | Sets lifecycle `status` and `type` properties automatically | beta |
+| 3 | tag-manage | Audits existing tags; scores against PascalCase convention (severity-classified); renames, merges, and removes duplicates / case variants / convention violations behind a preview-and-confirm gate with a rich vault-written report | beta (shipped v0.2.1) |
+| 4 | tag-organize | Organizes flat tags into a nested hierarchy — AI-proposed parent/child families over existing tags, scored and split into Implement / Decide / Ignore (with per-family note-counts) in a browsable proposal note so you triage by confidence and impact, applied behind a confirm gate (Slice 1: structure only, no auto-tagging yet) | beta (shipped v0.3.0) |
+| 5 | ai-paste-cleanup | Cleans AI-generated / pasted Markdown — strips citation markers, zero-width and non-breaking characters, bold/italic-wrapped headings, and blank-line runs; dry-run diff + a survival guard that protects links, checkboxes, and emoji | beta |
 
 > **Tag hierarchy (beta):** `tag-manage` can also nest flat tags under a parent you declare
 > (`#daytrading` → `#Investing/DayTrading`). See the [Tag Hierarchy guide](docs/tag-hierarchy.md).
@@ -62,7 +63,7 @@ skills above.
 
 | # | Skill | What it will do | Target |
 |---|-------|----------------|--------|
-| 1 | tag-organize (auto-tag) | Fills under-tagged notes with tags from their content, behind a closed + gated-new vocabulary and a per-tag approval surface (tag-organize Slice 2) | v0.3.0 |
+| 1 | tag-organize (auto-tag) | Fills under-tagged notes with tags from their content, behind a closed + gated-new vocabulary and a per-tag approval surface (tag-organize Slice 2) | v0.4.x (planned) |
 
 Want to help shape any of these? **[Open an issue](https://github.com/neckarshore-ai/obsidian-vault-autopilot/issues)** with your use case.
 

@@ -105,7 +105,9 @@ export OBSIDIAN_VAULT_PATH="/path/to/your/vault"
 
 No hardcoded paths. No assumptions about vault location. One variable, one truth.
 
-## Target Skills (7)
+## Target Skills
+
+> **Status (2026-06-27):** the plugin now ships **9 skills** (3 stable + 6 beta) — see the [README](../README.md) for the live list. The table below is the original design vision. `tag-manage`, `tag-organize`, and `ai-paste-cleanup` have since shipped (beta) and are no longer "deferred".
 
 | # | Skill | Core Task | Nahbereich | Report |
 |---|-------|-----------|------------|--------|
@@ -115,7 +117,7 @@ No hardcoded paths. No assumptions about vault location. One variable, one truth
 | 4 | property-classify | Set `status` and `type` from rules | Normalize property-key casing | Classifications + conflicts + distribution |
 | 5 | property-describe | Generate `description` from content | Write `description: TBD` for too-thin notes | Written vs. skipped vs. flagged |
 | 6 | property-enrich | Fill missing `title`/`created`/`modified` | Create frontmatter if none exists | Fields added + source per note |
-| 7 | tag-manage | Audit tags + suggest from content (v0.2.0, deferred) | Auto-fix obvious convention violations | Tag health + changes + suggestions |
+| 7 | tag-manage | Audit + convention-compliance check + guided cleanup of existing tags (shipped beta) | Auto-fix obvious convention violations | Tag health + changes + suggestions |
 
 Plus: a future **config/onboarding skill** that analyzes a vault and proposes configuration. Former target skills social-scraper, research-report, and social-post moved out of this plugin into the standalone scraper-skill family (D17).
 
