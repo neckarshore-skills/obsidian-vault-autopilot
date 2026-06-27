@@ -83,6 +83,8 @@ Never match `<field>:` against the joined frontmatter string — it may also app
 5. Never insert before an opening field that "looks related". Frontmatter is order-insignificant for YAML; appending at the end is always safe.
 ```
 
+> **Note:** Recipe (c) is the safe INSERT primitive — append-at-end is always structurally safe. It does NOT produce a canonical human-readable layout. The canonical order (`title` first, `tags` last, …) is applied by the **recipe (g) finalize pass**, which runs after inserts. Insert with (c); reorder with (g).
+
 ## Recipe (d) — Append to a list field (e.g. `tags:`)
 
 This is the F15 surface. Read it twice.
@@ -365,3 +367,81 @@ content = re.sub(
 ```
 
 Use recipe (f) as defined. Walk lines. Per-line regex match. Replace per line.
+
+## Recipe (g) — Canonical property order (block-aware reorder)
+
+This is the finalize pass. Recipe (c) is the safe INSERT primitive (append-at-end-is-safe); recipe (g) is the REORDER pass that runs *after* inserts to produce the canonical, human-readable layout. **Reorder UNITS (a key line + its indented continuation), never lines** — moving a key line without its list items is the F15-class orphan bug.
+
+> **Scope:** reorder only. Recipe (g) does NOT dedupe duplicate keys (that is recipe f), does NOT repair broken keys (recipe f), does NOT add or remove properties. It only changes the order of existing property blocks.
+
+### Canonical order (DEFAULT; configurable via `property_order`)
+
+1. `title` 2. `description` 3. `type` 4. `status` 5. `created` 6. `modified` 7. `aliases` 8. `source` 9. `parent` 10. `priority` → *(custom / unknown keys — preserved in original relative order)* → **last: `tags`**
+
+- The lead block (1-10) is the logical-lead exception (a deliberate logical block may lead the otherwise-A→Z default). `tags` is the symmetric trailer.
+- Unknown/custom keys (`version`, `up`, `related`, …) keep their original relative order, placed between the known block and `tags`.
+
+### Procedure
+
+```text
+1. Read frontmatter (recipe a). Preserve BOM, CRLF-vs-LF, and trailing-newline
+   presence. If no frontmatter, or unclosed frontmatter, no-op.
+2. Walk frontmatter lines, grouping into property BLOCKS:
+   a. A top-level KEY LINE = column-0 (no leading whitespace), not blank, not a
+      comment, contains a colon.
+   b. A BLOCK = its leading comment trivia + the key line + its CONTINUATION.
+      The continuation is the run of following indented-or-blank lines, with
+      trailing blank lines trimmed off. A blank line FOLLOWED BY a further
+      indented line (inside a `|`/`>` block scalar, or between list items) STAYS;
+      trailing blanks before the next key leave.
+   c. Blank lines between top-level keys are non-semantic -> DROPPED.
+   d. Comment lines (`#...`) are semantic -> KEPT as leading trivia of the
+      FOLLOWING block (they move with it). A trailing comment with no following
+      block is kept at the end of the frontmatter.
+3. Stable-sort blocks by rank: lead block in CANONICAL order, then custom keys in
+   ORIGINAL relative order, then `tags` last. Equal-rank ties keep original order.
+4. Re-emit: reordered blocks (internal lines verbatim) + kept trailing comments,
+   between the two `---`, with the original line ending + trailing-newline + BOM.
+5. Idempotency: re-running on the output is a zero-diff no-op.
+```
+
+**Reference implementation:** `scripts/validate-recipe-g.py` (`reorder(text)`), proven against the golden fixtures in `tests/fixtures/recipe-g-property-order/` and the CRLF/BOM/no-frontmatter/idempotency invariants in its `--selftest`. A skill applies recipe (g) by following this procedure line-by-line, OR by invoking the validator (`python3 scripts/validate-recipe-g.py --file <note>` prints the reordered text), never by an ad-hoc regex.
+
+### Worked example — reorder, orphan-safe
+
+**Input:**
+
+```yaml
+---
+created: 2024-01-01
+tags:
+  - Finance
+title: Budget
+---
+```
+
+**Procedure (recipe g):** blocks = `created` / `tags`(+`  - Finance`) / `title`. Ranks: `title`→1, `created`→5, `tags`→last. Stable-sort. The `  - Finance` item is part of the `tags` block and moves with it.
+
+**Output:**
+
+```yaml
+---
+title: Budget
+created: 2024-01-01
+tags:
+  - Finance
+---
+```
+
+Re-run on the output: same blocks, same order, zero diff. The list item never detaches from `tags:`.
+
+### DO NOT — line-sort orphan pattern
+
+```python
+# DO NOT WRITE THIS — sorting joined lines orphans list items.
+frontmatter = "\n".join(sorted(frontmatter_lines, key=rank_of_line))
+# Why it fails: `  - Finance` is sorted as its own standalone line, detached from
+# its `tags:` key. The list item lands wherever its own text ranks — orphaned
+# above the closing `---` or under the wrong key. This is the F15 data-loss class.
+# Reorder UNITS (key + continuation), not lines. Use recipe (g) / validate-recipe-g.py.
+```
