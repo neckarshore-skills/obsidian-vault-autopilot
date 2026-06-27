@@ -24,7 +24,7 @@ logs/
   run-history.md           <- Skill execution log
 ```
 
-## Skills (4 launch-scope + 3 in-development)
+## Skills (4 launch-scope + 5 in-development)
 
 Launch-scope = Cycle-4 Gold-Run validated (see D19 in the internal decisions ledger). In-development beta skills live in the codebase but were not part of the launch-scope test matrix.
 
@@ -37,6 +37,8 @@ Launch-scope = Cycle-4 Gold-Run validated (see D19 in the internal decisions led
 | 5 | note-quality-check | Score notes, suggest deletions | beta (in development) |
 | 6 | property-classify | Classify note status and type | beta (in development) |
 | 7 | tag-manage | Audit + convention-compliance check + guided cleanup of existing tags (rename/merge/remove, rich vault report) | beta (in development) |
+| 8 | tag-organize | Propose a nested tag hierarchy over existing tags (scored Implement/Decide/Ignore proposal note); apply nests behind a confirm gate | beta (in development) |
+| 9 | ai-paste-cleanup | Clean AI-generated / pasted Markdown (citation markers, zero-width chars, wrapped headings, blank-line runs) with a dry-run diff + survival guard | beta (in development) |
 
 ## Quality Checklist per Skill
 
