@@ -179,4 +179,4 @@ The orchestrator handles ordering, passes findings between skills, and produces 
 
 ---
 
-Have an idea? [Open an issue](https://github.com/neckarshore-ai/obsidian-vault-autopilot/issues) or check [CONTRIBUTING.md](CONTRIBUTING.md).
+Have an idea? [Open an issue](https://github.com/neckarshore-skills/obsidian-vault-autopilot/issues) or check [CONTRIBUTING.md](CONTRIBUTING.md).

@@ -6,7 +6,7 @@
     "name": "Neckarshore AI",
     "url": "https://neckarshore.ai"
   },
-  "repository": "https://github.com/neckarshore-ai/obsidian-vault-autopilot",
+  "repository": "https://github.com/neckarshore-skills/obsidian-vault-autopilot",
   "license": "MIT",
   "keywords": ["obsidian", "obsidian-plugin", "claude-code", "agent-skills", "vault-management", "automation", "ai", "productivity"]
 }

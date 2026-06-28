@@ -34,6 +34,10 @@ coverage/
 # Lint cache
 .eslintcache
 
+# Python bytecode
+__pycache__/
+*.pyc
+
 # Logs
 *.log
 

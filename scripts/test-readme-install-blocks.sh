@@ -13,7 +13,7 @@
 #   "git@github.com: Permission denied (publickey)").
 #
 # Verified on 2026-05-15: single-line shorthand
-#   `claude plugin marketplace add neckarshore-ai/obsidian-vault-autopilot`
+#   `claude plugin marketplace add neckarshore-skills/neckarshore-plugins`
 # succeeds (CC logs "SSH not configured, cloning via HTTPS" and falls through
 # to HTTPS). The defect is the README shape, not the URL form.
 #
