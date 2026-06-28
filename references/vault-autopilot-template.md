@@ -1,6 +1,6 @@
 # Vault Autopilot
 
-This vault is managed by [Obsidian Vault Autopilot](https://github.com/neckarshore-ai/obsidian-vault-autopilot) — an AI-powered plugin that sorts, renames, tags, and enriches your notes automatically.
+This vault is managed by [Obsidian Vault Autopilot](https://github.com/neckarshore-skills/obsidian-vault-autopilot) — an AI-powered plugin that sorts, renames, tags, and enriches your notes automatically.
 
 ## Available Skills
 

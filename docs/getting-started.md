@@ -53,7 +53,7 @@ For details on why the clone method matters, see [Cloning Guide](cloning-guide.m
 In Claude Code, add the marketplace:
 
 ```bash
-/plugin marketplace add neckarshore-ai/obsidian-vault-autopilot
+/plugin marketplace add neckarshore-skills/neckarshore-plugins
 ```
 
 Then install the plugin:
@@ -140,7 +140,7 @@ Once you are satisfied with the results on the clone:
 | 1 | "0 files processed" on a vault with hundreds of notes | Cooldown is protecting everything — all files appear recently created (clone with reset birthtimes) | Run `property-enrich` to backfill `created` in bulk, or check that auto-enrich is working (skills should fill `created` per-note) |
 | 2 | Skill skips files you expected it to process | Files are newer than 3 days (cooldown) or match a protected pattern | Check `created` dates; adjust cooldown if needed |
 | 3 | Files moved to `_secret/` unexpectedly | Secret detection found sensitive content (API keys, passwords, financial data) | Review the files — this is a safety feature |
-| 4 | "Invalid frontmatter" errors in Obsidian after a run | Corrupted YAML — rare but possible | Restore from backup and file an [issue](https://github.com/neckarshore-ai/obsidian-vault-autopilot/issues) |
+| 4 | "Invalid frontmatter" errors in Obsidian after a run | Corrupted YAML — rare but possible | Restore from backup and file an [issue](https://github.com/neckarshore-skills/obsidian-vault-autopilot/issues) |
 
 ## Next Steps
 

@@ -72,7 +72,7 @@ Only after the backup is verified should you proceed to the [Cloning Guide](clon
 
 1. If the vault is under Git: `git diff` shows exactly what changed. `git checkout -- <file>` reverts individual files.
 2. If not: restore affected files from your backup.
-3. Report the issue — a skill should never produce invalid YAML. File an [issue](https://github.com/neckarshore-ai/obsidian-vault-autopilot/issues) with an example file (sanitized) and the run log.
+3. Report the issue — a skill should never produce invalid YAML. File an [issue](https://github.com/neckarshore-skills/obsidian-vault-autopilot/issues) with an example file (sanitized) and the run log.
 
 ### "Filesystem birthtime is lost / cooldown is behaving strangely"
 
@@ -95,7 +95,7 @@ This is the **birthday-bug** failure mode — see [incident-birthday-bug.md](inc
 2. Close Obsidian.
 3. Restore from your most recent pre-skill-run backup.
 4. Verify the restore: file count, a sample of notes, the folder structure.
-5. Open an [issue](https://github.com/neckarshore-ai/obsidian-vault-autopilot/issues) with the run log from `logs/run-history.md` — we want to understand what happened.
+5. Open an [issue](https://github.com/neckarshore-skills/obsidian-vault-autopilot/issues) with the run log from `logs/run-history.md` — we want to understand what happened.
 
 ## When to File an Issue vs. When to Just Restore
 

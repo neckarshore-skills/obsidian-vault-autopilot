@@ -72,7 +72,7 @@ Claude Code's marketplace caches plugin content keyed on the `plugin.json` versi
 /reload-plugins
 ```
 
-**Process implication for Vault Autopilot itself:** every release that touches plugin content bumps the version field in `plugin.json` and `marketplace.json`, even for docs-only or wiring-only changes. Without that bump, no existing install would receive the update.
+**Process implication for Vault Autopilot itself:** every release that touches plugin content bumps the version field in `plugin.json`, even for docs-only or wiring-only changes. Without that bump, no existing install would receive the update.
 
 ## Long Path Limit (MAX_PATH 260)
 

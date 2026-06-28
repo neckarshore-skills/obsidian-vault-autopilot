@@ -66,7 +66,7 @@ One capability is designed but not yet active:
 |---|-------|----------------|--------|
 | 1 | tag-organize (auto-tag) | Fills under-tagged notes with tags from their content, behind a closed + gated-new vocabulary and a per-tag approval surface (tag-organize Slice 2) | v0.4.x (planned) |
 
-Want to help shape it? **[Open an issue](https://github.com/neckarshore-ai/obsidian-vault-autopilot/issues)** with your use case.
+Want to help shape it? **[Open an issue](https://github.com/neckarshore-skills/obsidian-vault-autopilot/issues)** with your use case.
 
 ## Safety
 
@@ -125,7 +125,7 @@ see [CONTRIBUTING.md](CONTRIBUTING.md). For community guidelines, see
 Add the marketplace:
 
 ```bash
-/plugin marketplace add neckarshore-ai/obsidian-vault-autopilot
+/plugin marketplace add neckarshore-skills/neckarshore-plugins
 ```
 
 Then install the plugin:
@@ -138,17 +138,17 @@ Then install the plugin:
 
 ### Manual
 
-Clone the repo and register it as a local marketplace:
+Clone the marketplace repo and register it as a local marketplace:
 
 ```bash
-git clone https://github.com/neckarshore-ai/obsidian-vault-autopilot.git \
-  ~/.claude/plugins/obsidian-vault-autopilot
+git clone https://github.com/neckarshore-skills/neckarshore-plugins.git \
+  ~/.claude/plugins/neckarshore-plugins
 ```
 
 Then in Claude Code, add the marketplace:
 
 ```bash
-/plugin marketplace add ~/.claude/plugins/obsidian-vault-autopilot
+/plugin marketplace add ~/.claude/plugins/neckarshore-plugins
 ```
 
 And install the plugin:
@@ -180,7 +180,7 @@ Move your vault to another Markdown tool tomorrow. These skills still work.
 
 ## Contributing
 
-Found a bug? Have a skill idea? **[Open an issue](https://github.com/neckarshore-ai/obsidian-vault-autopilot/issues)** — that's how we track and prioritize all work. New skill proposals start as issues, not pull requests.
+Found a bug? Have a skill idea? **[Open an issue](https://github.com/neckarshore-skills/obsidian-vault-autopilot/issues)** — that's how we track and prioritize all work. New skill proposals start as issues, not pull requests.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for full guidelines.
 

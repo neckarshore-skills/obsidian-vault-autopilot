@@ -55,7 +55,7 @@ not access files outside that path.
 
 ## Reporting a Vulnerability
 
-Report security issues via [GitHub Issues](https://github.com/neckarshore-ai/obsidian-vault-autopilot/issues).
+Report security issues via [GitHub Issues](https://github.com/neckarshore-skills/obsidian-vault-autopilot/issues).
 
 Include:
 
