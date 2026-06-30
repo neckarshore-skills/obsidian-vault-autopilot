@@ -1,5 +1,5 @@
-const { buildRecommendations } = require('../scripts/recommend.js');
-const { buildInventory } = require('../scripts/tags.js');
+const { buildRecommendations, buildRemovalRecommendations } = require('../scripts/recommend.js');
+const { buildInventory, auditFindings } = require('../scripts/tags.js');
 const { mergeOverrides } = require('../scripts/config.js');
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -152,4 +152,59 @@ test('v2(c) PIN: meaningful alphanumeric tags (5G, 4G, 9a) are valid and get NO 
     const recs = buildRecommendations(buildInventory(notes), dict);
     assert.equal(recs.length, 0, `${tag} is a meaningful tag, not an artifact -- it must not be renamed or removed`);
   }
+});
+
+// ---- Slice 1a (#OBI-2026-06-28-8): numeric-artifact removal candidates --------
+// Deterministic, opt-in removal proposals for letter-free numeric junk (`1`, `42`,
+// `1-3`). Reuses findings.numericArtifacts (already letter-free); never touches
+// otherInvalidTags (`Make.com`, `2prio` may be real) or valid tags. A separate set
+// from buildRecommendations (which skips invalids entirely) -> disjoint by construction.
+
+const numerics = (notes) => buildRemovalRecommendations(buildInventory(notes), auditFindings(notes).numericArtifacts, notes);
+
+test('buildRemovalRecommendations: one remove op per numeric artifact, with notesAffected', () => {
+  const notes = [
+    { path: 'a.md', text: '---\ntags:\n  - "1"\n  - research\n---\nx\n' },
+    { path: 'b.md', text: '---\ntags:\n  - "1"\n---\nx\n' },
+  ];
+  const recs = numerics(notes);
+  const r = recs.find((x) => x.from === '1');
+  assert.ok(r, 'numeric tag 1 gets a removal candidate');
+  assert.equal(r.kind, 'remove');
+  assert.equal(r.source, 'numeric-artifact');
+  assert.equal(r.notesAffected, 2, 'tag 1 is on 2 notes');
+  assert.deepEqual(r.ops, [{ type: 'remove', from: '1' }]);
+});
+
+test('buildRemovalRecommendations: a removal rec carries NO synthesized `to` (honest artifact, not a fake rename)', () => {
+  const notes = [{ path: 'a.md', text: '---\ntags:\n  - "42"\n---\nx\n' }];
+  const r = numerics(notes)[0];
+  assert.ok(r, 'a candidate exists');
+  assert.ok(!('to' in r), 'a removal has no target — must not synthesize to: ""');
+});
+
+test('buildRemovalRecommendations: never proposes removing a valid tag or a letter-bearing invalid (Make.com)', () => {
+  const notes = [
+    { path: 'a.md', text: '---\ntags:\n  - research\n  - "1"\n---\nx\n' },
+    { path: 'b.md', text: '---\ntags:\n  - Make.com\n---\nx\n' }, // otherInvalid (has letters) — NOT a candidate
+  ];
+  const froms = numerics(notes).map((r) => r.from);
+  assert.deepEqual(froms, ['1'], 'only the letter-free numeric is a removal candidate');
+});
+
+test('buildRemovalRecommendations: ids assigned, sorted by notesAffected desc then name', () => {
+  const notes = [
+    { path: 'a.md', text: '---\ntags:\n  - "7"\n  - "42"\n---\nx\n' },
+    { path: 'b.md', text: '---\ntags:\n  - "42"\n---\nx\n' }, // 42 on 2 notes, 7 on 1
+  ];
+  const recs = numerics(notes);
+  assert.equal(recs[0].from, '42'); // higher notesAffected first
+  assert.equal(recs[0].id, 1);
+  assert.equal(recs[1].from, '7');
+  assert.equal(recs[1].id, 2);
+});
+
+test('buildRemovalRecommendations: no numeric artifacts -> empty list', () => {
+  const notes = [{ path: 'a.md', text: '---\ntags:\n  - research\n---\nx\n' }];
+  assert.deepEqual(numerics(notes), []);
 });

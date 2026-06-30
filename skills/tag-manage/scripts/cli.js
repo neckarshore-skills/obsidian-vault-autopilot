@@ -13,7 +13,7 @@ const path = require('node:path');
 const { applyOps, auditFindings, buildInventory, frontmatterTags } = require('./tags.js');
 const { analyze } = require('./analysis.js');
 const { classifyTag } = require('./convention.js');
-const { buildRecommendations, buildContext } = require('./recommend.js');
+const { buildRecommendations, buildRemovalRecommendations, buildContext } = require('./recommend.js');
 const { parseHierarchy, buildNestRecommendations } = require('./hierarchy.js');
 const { clusterByName, scoreCluster } = require('./induce.js');
 const { renderReport, renderProposal, REPORT_MARKER_TAG } = require('./report.js');
@@ -201,13 +201,16 @@ function runAudit(dir, { date, fileStamp = '', defaultsPath, configText, reportD
   // file) never silently re-homes tags; nest is opt-in via --from-recs the nest file.
   const { map: hierMap, errors: hierarchyErrors } = parseHierarchy(dict.hierarchy);
   const nestRecommendations = buildNestRecommendations(inventory, hierMap, notes);
+  // Slice 1a: numeric-artifact removal candidates. Destructive + opt-in, so kept in
+  // a SEPARATE list + file (mirrors nest) — never bundled into the default "apply all".
+  const removalRecommendations = buildRemovalRecommendations(inventory, findings.numericArtifacts, notes);
   const ctx = buildContext(inventory, dict);
   const violators = inventory.filter((r) => classifyTag(r.display, ctx).violation).length;
   const conformityPct = inventory.length ? Math.round(((inventory.length - violators) / inventory.length) * 100) : 100;
   const coveragePct = analysis.totalNotes ? Math.round((analysis.taggedNotes / analysis.totalNotes) * 100) : 0;
   const singletonRatioPct = inventory.length ? Math.round((analysis.singletons.length / inventory.length) * 100) : 0;
   const report = renderReport({ scope: 'Vault-wide', date, analysis, findings,
-    recommendations, nestRecommendations, healthScore: { conformityPct, coveragePct, singletonRatioPct }, excluded });
+    recommendations, nestRecommendations, removalRecommendations, healthScore: { conformityPct, coveragePct, singletonRatioPct }, excluded });
   let reportPath = null;
   if (reportDirAbs) {
     fs.mkdirSync(reportDirAbs, { recursive: true });
@@ -224,8 +227,13 @@ function runAudit(dir, { date, fileStamp = '', defaultsPath, configText, reportD
     if (nestRecommendations.length || fs.existsSync(nestPath)) {
       fs.writeFileSync(nestPath, JSON.stringify(nestRecommendations, null, 2), 'utf8');
     }
+    // Separate removals file (same opt-in + convergence-clear contract as nest).
+    const removalsPath = path.join(reportDirAbs, `.tag-manage-removals.json`);
+    if (removalRecommendations.length || fs.existsSync(removalsPath)) {
+      fs.writeFileSync(removalsPath, JSON.stringify(removalRecommendations, null, 2), 'utf8');
+    }
   }
-  return { report, recommendations, reportPath, nestRecommendations, hierarchyErrors };
+  return { report, recommendations, reportPath, nestRecommendations, removalRecommendations, hierarchyErrors };
 }
 
 function selectOps(recommendations, selection) {
@@ -384,6 +392,12 @@ if (require.main === module) {
         console.error(`\n${out.nestRecommendations.length} nest recommendation(s) (declared hierarchy). Review, then apply opt-in:`);
         for (const r of out.nestRecommendations) console.error(`  [${r.id}] ${r.from} -> ${r.to} (${r.notesAffected} notes)`);
         if (reportDirAbs) console.error(`  apply: cli.js plan <vault> --from-recs "${path.join(reportDirAbs, '.tag-manage-nest.json')}" --ids <ids>`);
+      }
+      // Make the opt-in removal candidates discoverable; removal is destructive, NOT part of "apply all".
+      if (out.removalRecommendations && out.removalRecommendations.length) {
+        console.error(`\n${out.removalRecommendations.length} removal candidate(s) (numeric artifacts). Review each — a bare year could be intentional — then apply opt-in:`);
+        for (const r of out.removalRecommendations) console.error(`  [${r.id}] remove ${r.from} (${r.notesAffected} notes)`);
+        if (reportDirAbs) console.error(`  apply: cli.js plan <vault> --from-recs "${path.join(reportDirAbs, '.tag-manage-removals.json')}" --ids <ids>`);
       }
       process.exit(0);
     }

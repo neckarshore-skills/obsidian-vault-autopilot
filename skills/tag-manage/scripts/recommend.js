@@ -70,4 +70,35 @@ function buildRecommendations(inventory, dict, notes) {
   return recs;
 }
 
-module.exports = { buildRecommendations, buildContext };
+// Slice 1a — deterministic removal candidates for letter-free numeric junk
+// (`1`, `42`, `1-3`). numericArtifacts is already the conservative letter-free set
+// (auditFindings: /^[\p{N}/_-]+$/u); otherInvalidTags (`Make.com`, `2prio`) is NEVER
+// consumed here — those may be real. A removal carries NO `to` (it has no target, so
+// the report renders from+notes, not a fake rename). Disjoint from buildRecommendations,
+// which skips invalids entirely (line: `if (!isValidTag(...)) continue`). Destructive +
+// opt-in: written to a SEPARATE sidecar, never bundled into the default "apply all".
+function buildRemovalRecommendations(inventory, numericArtifacts, notes) {
+  const byPath = notes ? new Map(notes.map((n) => [n.path, n.text])) : null;
+  const rowOf = new Map();
+  for (const r of inventory) for (const v of r.variants) rowOf.set(v, r);
+  const recs = [];
+  for (const tag of numericArtifacts || []) {
+    const r = rowOf.get(tag);
+    if (!r) continue;
+    const ops = [{ type: 'remove', from: logicalKey(tag) }];
+    let notesAffected = r.noteCount;
+    if (byPath) {
+      notesAffected = r.files
+        .map((p) => byPath.get(p))
+        .filter((t) => t !== undefined)
+        .filter((t) => applyOps(t, ops).changed)
+        .length;
+    }
+    recs.push({ kind: 'remove', from: tag, notesAffected, source: 'numeric-artifact', ops });
+  }
+  recs.sort((a, b) => b.notesAffected - a.notesAffected || a.from.localeCompare(b.from));
+  recs.forEach((rr, i) => { rr.id = i + 1; });
+  return recs;
+}
+
+module.exports = { buildRecommendations, buildRemovalRecommendations, buildContext };

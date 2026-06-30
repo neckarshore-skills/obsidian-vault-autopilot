@@ -126,7 +126,7 @@ function renderScanCoverage(excluded) {
   return parts.join('\n');
 }
 
-function renderReport({ scope, date, analysis: a, findings: f, recommendations: recs, healthScore: h, nestRecommendations: nest = [], excluded = [] }) {
+function renderReport({ scope, date, analysis: a, findings: f, recommendations: recs, healthScore: h, nestRecommendations: nest = [], removalRecommendations: removal = [], excluded = [] }) {
   const lines = [];
   lines.push(`---\ntitle: 'Tag Analysis Report - ${scope} - ${date}'\ndescription: 'Automated tag audit by Obsidian Vault Autopilot.'\ntype: inbox\nstatus: draft\ncreated: ${date}\ntags:\n  - ${REPORT_MARKER_TAG}\n---\n`);
   lines.push(`# Tag Analysis Report\n`);
@@ -153,6 +153,19 @@ function renderReport({ scope, date, analysis: a, findings: f, recommendations: 
       + table(['#', 'From', 'To', 'Notes'], nest.map((r) => [
         r.id, `\`${r.from}\``, `\`${r.to}\``, r.notesAffected,
       ])) + '\n');
+  }
+  // Removal candidates (Slice 1a) — letter-free numeric artifacts only. Rendered in its
+  // OWN opt-in section (like nest): destructive + irreversible, so NEVER part of "apply
+  // all". Candidates, not verdicts — a bare `2025` could be an intentional year, so the
+  // framing says review-per-id. Tag names backtick-wrapped (no bare #token -> linter-inert);
+  // a removal has no target, so the row shows tag + notes, never a from->to arrow.
+  if (removal.length) {
+    lines.push(`## Removal candidates (opt-in)\n\n`
+      + 'Numeric artifacts (`1`, `42`, `1-3`) are not real tags. These are **removal** candidates — '
+      + 'review each before applying (a bare `2025` could be an intentional year, not junk). They are '
+      + '**not** part of "apply all"; apply by id from the separate removals file. Removal is '
+      + 'irreversible — git is the only undo.\n\n'
+      + table(['#', 'Tag', 'Notes'], removal.map((r) => [r.id, `\`${r.from}\``, fmt(r.notesAffected)])) + '\n');
   }
   // No `#`-prefixed example tokens: obsidian-linter (move-tags-to-yaml) would promote
   // a `#1`-style token from this prose into the report's own frontmatter as a tag,

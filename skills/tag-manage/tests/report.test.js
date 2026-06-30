@@ -250,6 +250,28 @@ test('renderProposal: rows within a section are sorted by score descending', () 
   assert.ok(md.indexOf('`Market`') < md.indexOf('`Low`'), 'higher score first');
 });
 
+// --- Slice 1a: Removal candidates (opt-in) section --------------------------
+
+test('renderReport: renders an opt-in Removal candidates section with tag + notes (no rename arrow)', () => {
+  const md = renderReport({ ...data, removalRecommendations: [
+    { id: 1, kind: 'remove', from: '42', notesAffected: 3, source: 'numeric-artifact', ops: [] },
+  ] });
+  assert.match(md, /Removal candidates/);
+  assert.match(md, /opt-in/i);
+  assert.match(md, /`42`/);
+  assert.match(md, /\b3\b/);
+  // Honest framing: not part of "apply all", review per candidate.
+  assert.match(md, /apply all|review|irreversible/i);
+  // It is a removal, not a rename — no `from -> to` arrow on this row.
+  const section = md.split('Removal candidates')[1].split('## ')[0];
+  assert.doesNotMatch(section, /->|→/, 'a removal row must not render a rename arrow');
+});
+
+test('renderReport: no removal candidates -> no Removal candidates section', () => {
+  const md = renderReport({ ...data, removalRecommendations: [] });
+  assert.doesNotMatch(md, /Removal candidates/);
+});
+
 // --- #236 Scan Coverage section: the _-folder blindspot made honest ---------
 
 test('renderReport: a non-protected excluded _-folder is surfaced with its note count (0 is not "clean")', () => {

@@ -298,6 +298,79 @@ test('runAudit: a vault with no _-folders affirms full coverage', () => {
   }
 });
 
+// ---- Slice 1a: numeric removal candidates -> separate opt-in sidecar ---------
+
+test('runAudit: numeric removal candidates go to a SEPARATE .tag-manage-removals.json, never the default recs', () => {
+  const dir = tmpVault({
+    'a.md': '---\ntags:\n  - "1"\n  - research\n---\nx\n',
+    'b.md': '---\ntags:\n  - "1"\n---\nx\n',
+  });
+  const reportDirAbs = path.join(dir, 'Meta', 'Tag Management');
+  try {
+    const out = runAudit(dir, { date: '2026-06-30', defaultsPath: DEFAULTS, configText: null, reportDirAbs });
+    assert.equal(out.removalRecommendations.length, 1);
+    assert.equal(out.removalRecommendations[0].from, '1');
+    // sidecar written
+    const removals = JSON.parse(fs.readFileSync(path.join(reportDirAbs, '.tag-manage-removals.json'), 'utf8'));
+    assert.equal(removals[0].ops[0].type, 'remove');
+    // disjoint: the DEFAULT recs file must never carry a remove op (apply-all stays non-destructive)
+    const main = JSON.parse(fs.readFileSync(path.join(reportDirAbs, '.tag-manage-recommendations.json'), 'utf8'));
+    assert.equal(main.some((r) => r.ops.some((o) => o.type === 'remove')), false,
+      'the default "apply all" recs must never remove a tag');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('runAudit: no numeric artifacts -> no removals file, empty removalRecommendations', () => {
+  const dir = tmpVault({ 'a.md': '---\ntags:\n  - research\n---\nx\n' });
+  const reportDirAbs = path.join(dir, 'Meta', 'Tag Management');
+  try {
+    const out = runAudit(dir, { date: '2026-06-30', defaultsPath: DEFAULTS, configText: null, reportDirAbs });
+    assert.deepEqual(out.removalRecommendations, []);
+    assert.equal(fs.existsSync(path.join(reportDirAbs, '.tag-manage-removals.json')), false);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('runAudit: a converged re-audit clears the stale .tag-manage-removals.json to [] (F-NEST-1 class)', () => {
+  const dir = tmpVault({ 'a.md': '---\ntags:\n  - "1"\n  - research\n---\nx\n' });
+  const reportDirAbs = path.join(dir, 'Meta', 'Tag Management');
+  const opts = { date: '2026-06-30', defaultsPath: DEFAULTS, configText: null, reportDirAbs };
+  const removalsPath = path.join(reportDirAbs, '.tag-manage-removals.json');
+  try {
+    runAudit(dir, opts);
+    assert.equal(JSON.parse(fs.readFileSync(removalsPath, 'utf8')).length, 1, 'audit #1 writes the removal candidate');
+    // Apply the removal -> the numeric tag is gone.
+    const ops = selectOps(JSON.parse(fs.readFileSync(removalsPath, 'utf8')), 'all');
+    applyToVault(dir, ops, { write: true, reportDirAbs });
+    // Audit #2 (convergence): the on-disk sidecar MUST be cleared to [], not left stale.
+    const out = runAudit(dir, opts);
+    assert.deepEqual(out.removalRecommendations, [], 'converged: no removal candidates computed');
+    assert.deepEqual(JSON.parse(fs.readFileSync(removalsPath, 'utf8')), [],
+      'the on-disk removals sidecar must be cleared to [] on convergence (no stale recs diverging from the report)');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('Slice 1a end-to-end: apply --from-recs the removals file removes the numeric tag from frontmatter', () => {
+  const dir = tmpVault({ 'a.md': '---\ntags:\n  - "42"\n  - research\n---\nx\n' });
+  const reportDirAbs = path.join(dir, 'Meta', 'Tag Management');
+  try {
+    runAudit(dir, { date: '2026-06-30', defaultsPath: DEFAULTS, configText: null, reportDirAbs });
+    const removalRecs = JSON.parse(fs.readFileSync(path.join(reportDirAbs, '.tag-manage-removals.json'), 'utf8'));
+    const ops = selectOps(removalRecs, [1]);
+    applyToVault(dir, ops, { write: true, reportDirAbs });
+    const after = fs.readFileSync(path.join(dir, 'a.md'), 'utf8');
+    assert.doesNotMatch(after, /- "?42"?/, 'the numeric tag 42 must be removed');
+    assert.match(after, /- research/, 'the real tag must be untouched');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 // ---- selectOps unit tests (Task 9) ----------------------------------------
 
 const recs = [
