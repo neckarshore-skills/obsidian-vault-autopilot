@@ -114,7 +114,7 @@ function renderScanCoverage(excluded) {
     const missing = nonProtected.reduce((s, e) => s + (typeof e.noteCount === 'number' ? e.noteCount : 0), 0);
     const n = nonProtected.length;
     parts.push(`> [!warning] ${n} ${n === 1 ? 'folder' : 'folders'} excluded from this scan (${fmt(missing)} ${missing === 1 ? 'note' : 'notes'})`);
-    parts.push(`> The audit skips every \`_\`-prefixed folder. The findings below cover the **scanned** vault only — a count of \`0\` does **not** mean these folders are clean. Move a folder out from under its \`_\` prefix to bring it into scope (configurable inclusion is a planned follow-up).`);
+    parts.push(`> This scan skips every \`_\`-prefixed folder. The results below cover the **scanned** vault only — a count of \`0\` does **not** mean these folders are clean. Move a folder out from under its \`_\` prefix to bring it into scope (configurable inclusion is a planned follow-up).`);
     parts.push('');
     parts.push(table(['Folder', 'Notes'], nonProtected.map((e) => [`\`${e.folder}\``, fmt(e.noteCount)])));
   }
@@ -182,7 +182,7 @@ function renderReport({ scope, date, analysis: a, findings: f, recommendations: 
 // carries REPORT_MARKER_TAG so future scans exclude it, backtick-wraps every tag name, and
 // emits NO bare #token (the obsidian-linter would promote such a token into this note's own
 // frontmatter -> self-poisoning; the OBI-2026-06-21-2 invariant). Name-only proposals to prune.
-function renderProposal({ scope, date, clusters }) {
+function renderProposal({ scope, date, clusters, excluded = [] }) {
   const CATS = [
     ['implement', 'Implement (recommended — review, then apply as a batch)'],
     ['decide', 'Decide (your call — content-sample the unclear ones)'],
@@ -209,6 +209,9 @@ function renderProposal({ scope, date, clusters }) {
   lines.push(`---\ntitle: 'Tag Organize Proposal - ${scope} - ${date}'\ndescription: 'Proposed tag hierarchy by Obsidian Vault Autopilot.'\ntype: inbox\nstatus: draft\ncreated: ${date}\ntags:\n  - ${REPORT_MARKER_TAG}\n---\n`);
   lines.push(`# Tag Organize Proposal\n`);
   lines.push(`> [!summary]\n> **Scope:** ${scope}\n> **Candidate families:** ${fmt(clusters.length)} -> Implement ${counts.implement} . Decide ${counts.decide} . Ignore ${counts.ignore}\n> Score = structural signal strength (not a probability) — see Basis. Implement is a recommended batch, still applied behind the confirm gate; nothing is auto-applied.\n`);
+  // Same #236 honesty as the audit report: induce skips _-folders too, so the proposal
+  // must disclose what it never saw — clusters cover the scanned vault only.
+  lines.push(renderScanCoverage(excluded) + '\n');
   for (const c of CATS) lines.push(section(c));
   lines.push(`> [!tip] Next Steps\n> For each family you approve: \`cli.js set-hierarchy <vault> --parent <Parent> --children <Child1,Child2>\`, then re-audit and apply the nests behind the confirm gate. Skip families that do not represent a real parent.\n`);
   return lines.join('\n');

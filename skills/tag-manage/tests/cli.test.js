@@ -371,6 +371,25 @@ test('Slice 1a end-to-end: apply --from-recs the removals file removes the numer
   }
 });
 
+// ---- #236 residual: runInduce proposal note discloses skipped _-folders ------
+
+test('runInduce: the proposal note discloses _-folders skipped by the scan (Scan Coverage)', () => {
+  const dir = tmpVault({
+    'a.md': '---\ntags: [ProjectManagement]\n---\nx\n',
+    'b.md': '---\ntags: [ProjectInstructions]\n---\nx\n',
+    '_Work/w.md': '---\ntags: [hidden]\n---\nx\n', // never scanned, but must be disclosed
+  });
+  const reportDirAbs = path.join(dir, 'reports');
+  try {
+    const out = runInduce(dir, { reportDirAbs, date: '2026-06-30' });
+    const note = fs.readFileSync(out.notePath, 'utf8');
+    assert.match(note, /Scan Coverage/);
+    assert.match(note, /`_Work`/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 // ---- selectOps unit tests (Task 9) ----------------------------------------
 
 const recs = [

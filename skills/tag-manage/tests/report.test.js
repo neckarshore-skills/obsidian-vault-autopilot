@@ -250,6 +250,26 @@ test('renderProposal: rows within a section are sorted by score descending', () 
   assert.ok(md.indexOf('`Market`') < md.indexOf('`Low`'), 'higher score first');
 });
 
+// --- #236 residual: tag-organize proposal note discloses the same blindspot ---
+
+test('renderProposal: discloses skipped _-folders (Scan Coverage), reusing the audit framing', () => {
+  const md = renderProposal({ scope: 'Vault-wide', date: '2026-06-30', clusters: [],
+    excluded: [{ folder: '_Work', noteCount: 5, protected: false }] });
+  assert.match(md, /Scan Coverage/);
+  assert.match(md, /`_Work`/);
+  assert.match(md, /\b5\b/);
+});
+
+test('renderProposal: no excluded folders -> affirms full coverage', () => {
+  const md = renderProposal({ scope: 'Vault-wide', date: '2026-06-30', clusters: [], excluded: [] });
+  assert.match(md, /Full vault scanned/);
+});
+
+test('renderProposal: excluded omitted (legacy callers) still renders + does not throw', () => {
+  const md = renderProposal({ scope: 'Vault-wide', date: '2026-06-30', clusters: [] });
+  assert.match(md, /Tag Organize Proposal/);
+});
+
 // --- Slice 1a: Removal candidates (opt-in) section --------------------------
 
 test('renderReport: renders an opt-in Removal candidates section with tag + notes (no rename arrow)', () => {
