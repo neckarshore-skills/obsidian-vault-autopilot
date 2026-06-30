@@ -22,8 +22,15 @@ class SurvivalError extends Error {
 
 // Case-folded identity. Strips an optional leading '#'. Preserves '/'.
 // Uses String.toLowerCase() (Unicode-aware) — NOT an ASCII-only fold (German vault).
+// NFC-normalizes first so a tag stored decomposed (NFD — macOS / Apple-Notes / iOS
+// imports write umlauts as base+combining) and the same tag authored composed (NFC —
+// what an LLM emits in JSON, and what most editors save) resolve to ONE key. Without
+// this, an umlaut tag (`Fördermittel`) keys differently on the two paths: the apply
+// match silently misses, and the Slice-2 cross-language guard hard-aborts the whole
+// batch on a tag that is plainly present. NFC is identity on ASCII, so ASCII tags are
+// untouched. Normalize before lowercasing (lowercasing preserves NFC for German).
 function logicalKey(tag) {
-  return String(tag).replace(/^#/, '').toLowerCase();
+  return String(tag).replace(/^#/, '').normalize('NFC').toLowerCase();
 }
 
 // Separator-insensitive form: drop `-`, `_`, and whitespace. Lets a no-separator

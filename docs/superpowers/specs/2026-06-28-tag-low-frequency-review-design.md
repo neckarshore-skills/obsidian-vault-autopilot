@@ -118,18 +118,37 @@ wired into `cli.js` for both `plan` and `apply`:
    This is a strict improvement — it breaks no existing engine rec, because `buildRecommendations`,
    `buildNestRecommendations`, and `buildRemovalRecommendations` are all inventory-derived.
 
-2. **Strict, cross-language only (`source: 'cross-language'`):** the rename `to` (the merge target)
-   **must also exist in the live inventory** — the `both-exist` guard. This is what enforces "never
-   invent a target" in code, not just instruction, and stops the model from translating the user's
-   tag language wholesale.
+2. **Both-exist, the DEFAULT for renames:** the rename `to` (the merge target) **must also exist in
+   the live inventory** — the `both-exist` guard — **unless** the rec carries an engine-set
+   `targetMayBeNew: true` marker. This enforces "never invent a target" in code, not just
+   instruction, and stops the model from translating the user's tag language wholesale.
 
-**Merge-specific by design.** The strict `to`-in-inventory check fires **only** on `source:
-'cross-language'` recs. It deliberately does **not** touch:
-- **nest recs** — a nest's `to` is a slash path (`Parent/Leaf`) whose parent may legitimately be new (`set-hierarchy` creates it);
-- **spelling folds** — a convention rename's `to` is the corrected canonical form, which may not yet exist as its own tag.
+**Safety-by-default — inverted from the first cut.** The v0 of this guard keyed the strict check on
+`source === 'cross-language'`, a field the model itself authors. The adversarial review (see the
+2026-06-30 build) proved that bypassable: a model that omits `source` escaped the check and a
+well-formed **invented** target wrote (repro: an unstamped `skalierung → Scaling` applied, with
+`Scaling` never present in the vault). The corrected design **inverts the gating**: both-exist is the
+default for every rename, and only the **engine-authored** lenient paths opt out via `targetMayBeNew`,
+which the engine stamps:
+- **nest recs** (`buildNestRecommendations`) — `to` is a slash path (`Parent/Leaf`) whose parent is created on apply;
+- **convention folds** (`buildRecommendations`) — `to` is a deterministically computed canonical that may not yet exist as its own tag.
+
+Because the opt-out is engine-authored and a model sidecar never carries it, a forgetful **or**
+adversarial model that omits/mislabels fields gets the strict check, not a bypass. `source` becomes
+reporting metadata only, no longer load-bearing for safety. The residual limit is honest and
+documented: the guard prevents inventing a target, not choosing the **wrong existing** one (a
+wrong-but-real translation still passes — translation quality is model judgement).
 
 On any violation the validator **throws** — `ABORTED`, nothing written — the same fail-closed contract
 as the survival and mass-change guards.
+
+**Unicode coherence (NFC).** `logicalKey` NFC-normalizes before case-folding. macOS / Apple-Notes /
+iOS imports store umlauts decomposed (NFD); an LLM authoring the sidecar emits composed (NFC). Without
+a single normal form on both sides of every membership test, a German tag (`Fördermittel`) keys
+differently on the two paths — the apply match silently misses and the cross-language guard hard-aborts
+the whole batch on a tag that is plainly present. This is the DE half of a DE↔EN feature on the user's
+own NFD platform, so NFC is required for v1, not optional. NFC is identity on ASCII, so the change is
+inert for ASCII tags.
 
 ### The model pass (SKILL.md, `tag-organize`)
 

@@ -43,7 +43,11 @@ function mergeOverrides(defaults, local) {
   // children); hierarchy.js derives + validates the childKey map at use time.
   const brandStripped = buildStrippedIndex(brands);
   const compoundStripped = buildStrippedIndex(compounds);
-  return { brands, compounds, brandStripped, compoundStripped, brandHyphenSet, folderExclusive: l.folderExclusive || {}, reportDir: l.reportDir || null, hierarchy: l.hierarchy || {} };
+  // crossLanguageCanonical (tag-organize Slice 2): which language wins a DE<->EN merge.
+  // 'en' (default) merges the German half into the English half; 'de' reverses it. Carried
+  // through as a config slot the MODEL consults when authoring the merge sidecar — the engine
+  // does NOT enforce it (translation is model judgement; validateRecs only checks both-exist).
+  return { brands, compounds, brandStripped, compoundStripped, brandHyphenSet, folderExclusive: l.folderExclusive || {}, reportDir: l.reportDir || null, hierarchy: l.hierarchy || {}, crossLanguageCanonical: l.crossLanguageCanonical || 'en' };
 }
 
 function loadConfig({ defaultsPath, configText }) {

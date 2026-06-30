@@ -19,6 +19,7 @@ const { clusterByName, scoreCluster } = require('./induce.js');
 const { renderReport, renderProposal, REPORT_MARKER_TAG } = require('./report.js');
 const { loadConfig, extractJsonFence } = require('./config.js');
 const { suggestReportDir, setReportDir, setHierarchy } = require('./report-home.js');
+const { validateRecs } = require('./validate.js');
 
 // Default mass-change ceiling: a single op touching more notes than this aborts.
 const DEFAULT_MASS_CHANGE_THRESHOLD = 50;
@@ -236,12 +237,17 @@ function runAudit(dir, { date, fileStamp = '', defaultsPath, configText, reportD
   return { report, recommendations, reportPath, nestRecommendations, removalRecommendations, hierarchyErrors };
 }
 
-function selectOps(recommendations, selection) {
-  const picked = selection === 'all' ? recommendations : recommendations.filter((r) => selection.includes(r.id));
-  return picked.flatMap((r) => r.ops);
+// Filter recs by --ids selection WITHOUT flattening — keeps rec.source/rec.ops intact so the
+// apply-boundary guard (validateRecs) can source-gate Tier 2. selectOps flattens on top of it.
+function selectRecs(recommendations, selection) {
+  return selection === 'all' ? recommendations : recommendations.filter((r) => selection.includes(r.id));
 }
 
-module.exports = { walkMarkdown, walkWithExclusions, readNotes, auditVault, applyToVault, planVault, MassChangeError, DEFAULT_MASS_CHANGE_THRESHOLD, runAudit, selectOps, runInduce, reportStamp, excludeReportArtifacts };
+function selectOps(recommendations, selection) {
+  return selectRecs(recommendations, selection).flatMap((r) => r.ops);
+}
+
+module.exports = { walkMarkdown, walkWithExclusions, readNotes, auditVault, applyToVault, planVault, MassChangeError, DEFAULT_MASS_CHANGE_THRESHOLD, runAudit, selectOps, selectRecs, runInduce, reportStamp, excludeReportArtifacts };
 
 // ---- CLI -------------------------------------------------------------------
 
@@ -415,7 +421,14 @@ if (require.main === module) {
         const recsData = JSON.parse(fs.readFileSync(fromRecs, 'utf8'));
         const idsRaw = getFlagValue(rest, '--ids');
         const selection = idsRaw ? idsRaw.split(',').map((s) => parseInt(s.trim(), 10)) : 'all';
-        ops = selectOps(recsData, selection);
+        const picked = selectRecs(recsData, selection);
+        // Apply-boundary guard (Slice 2): validate the SELECTED rec objects against the live
+        // inventory before flattening. Throws -> caught below -> ABORTED, exit 2, nothing written.
+        // Validate `picked` (not the whole file) so a partial --ids apply is not aborted by an
+        // unselected stale rec. Covers BOTH plan and apply (shared branch). The --ops path stays
+        // unvalidated by design (bare ops carry no rec.source — the developer/test escape hatch).
+        validateRecs(picked, buildInventory(readNotes(target)));
+        ops = picked.flatMap((r) => r.ops);
       } else {
         ops = loadOps(rest);
       }

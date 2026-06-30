@@ -87,8 +87,11 @@ function buildNestRecommendations(inventory, hierMap, notes) {
         .filter((t) => applyOps(t, ops).changed)
         .length;
     }
+    // targetMayBeNew: an ENGINE-authored nest whose `to` is a slash path (Parent/Leaf) whose
+    // parent is created on apply. Trusted opt-out from the apply-boundary both-exist guard
+    // (validate.js); model-authored cross-language merges carry no marker -> strict both-exist.
     recs.push({ id: 0, kind: 'nest', severity: 'LOW', from: r.variants.join(', '),
-      to: path, notesAffected, source: 'hierarchy', ops });
+      to: path, notesAffected, source: 'hierarchy', ops, targetMayBeNew: true });
   }
   recs.sort((a, b) => b.notesAffected - a.notesAffected || a.to.localeCompare(b.to));
   recs.forEach((rr, i) => { rr.id = i + 1; });
