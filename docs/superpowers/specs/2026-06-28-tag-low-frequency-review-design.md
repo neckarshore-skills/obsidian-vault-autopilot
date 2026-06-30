@@ -90,6 +90,69 @@ Recommendation: (3) immediately (cheap, honest), (2) as the real fix.
    deterministic (and reusable in `tag-manage`); a model pass is more flexible but non-deterministic.
    A seeded dictionary that the model extends is likely the right hybrid.
 
+## Slice 2 v1 — build resolution (2026-06-30)
+
+Slice 1 (deterministic surfacing + numeric removals) shipped (`tag-manage`, PRs #60/#61/#62).
+This section resolves the open questions for the **Slice 2 v1 build** and pins its scope. It is a
+delta on the design above, not a new feature.
+
+### Resolved decisions
+
+| # | Open question | Decision | Rationale |
+|---|---|---|---|
+| A | Dictionary vs. model for DE↔EN (open-q3) | **Skip the seeded dictionary in v1.** The model translates DE↔EN natively; the dictionary buys *reproducibility + `tag-manage` reuse*, not *capability*. The `both-exist` code-guard + the confirm gate make a model-only pass safe. | Reverses open-q3's "seeded dictionary the model extends." No concrete dictionary consumer exists today (YAGNI). Extension point preserved: the model writes its confirmed pairs to the merge sidecar, which *could* seed a future dictionary. |
+| B | Canonical direction when both halves exist | **English-canonical, config-overridable.** The German half merges into the English half by default — direction is by *language*, not by frequency. | The motivating Nexus session went DE→EN (evidence the user wants language normalization); English is the skill-content convention. A German-primary vault overrides via config. |
+| 2 | Doubletons too, or singletons only (open-q2) | **Both** (singletons + doubletons), via the existing `analysis.singletons` + `analysis.lowUsage`. `--max-count N` threshold deferred. | The lists already exist; no new surfacing primitive needed for v1. |
+
+### The load-bearing new code — `validateRecs(recs, inventory)`
+
+The `--from-recs` apply boundary (`selectOps` → `applyToVault`) currently validates **nothing**: a
+model-authored sidecar with `{type:'rename', from:'X', to:'Y'}` applies even when `Y` is invented.
+`applyOps` enforces survival, not inventory membership. Slice 2 closes this with a two-tier validator
+wired into `cli.js` for both `plan` and `apply`:
+
+1. **Universal (hardens every sidecar, model- or engine-authored):**
+   - every `op.type` is in the known set (`rename`, `remove`);
+   - every op's `from` resolves to a real logical tag in the live inventory (you cannot operate on a tag that is not there);
+   - `isValidTag(to)` for renames (the target is a well-formed tag string).
+   This is a strict improvement — it breaks no existing engine rec, because `buildRecommendations`,
+   `buildNestRecommendations`, and `buildRemovalRecommendations` are all inventory-derived.
+
+2. **Strict, cross-language only (`source: 'cross-language'`):** the rename `to` (the merge target)
+   **must also exist in the live inventory** — the `both-exist` guard. This is what enforces "never
+   invent a target" in code, not just instruction, and stops the model from translating the user's
+   tag language wholesale.
+
+**Merge-specific by design.** The strict `to`-in-inventory check fires **only** on `source:
+'cross-language'` recs. It deliberately does **not** touch:
+- **nest recs** — a nest's `to` is a slash path (`Parent/Leaf`) whose parent may legitimately be new (`set-hierarchy` creates it);
+- **spelling folds** — a convention rename's `to` is the corrected canonical form, which may not yet exist as its own tag.
+
+On any violation the validator **throws** — `ABORTED`, nothing written — the same fail-closed contract
+as the survival and mass-change guards.
+
+### The model pass (SKILL.md, `tag-organize`)
+
+A new "Cross-language merge + cluster" flow, instruction-driven (no LLM in the engine):
+
+1. Run `audit`/`induce` to read the low-frequency list (singletons + doubletons).
+2. Identify DE↔EN pairs where **both** halves exist in the inventory; the German half merges into the English half (default direction by language; config-overridable).
+3. Split **confident** (clear translation, same scope) from **borderline** (a merge that narrows or shifts meaning) — borderline is flagged, never auto-applied.
+4. Write confirmed merges to `.tag-organize-merges.json` as recs with `kind: 'merge', source: 'cross-language'`.
+5. Cross-language **clusters** (e.g. `Fördermittel*` + `Funding`) become a nest-under-a-parent proposal via the existing `set-hierarchy` path — **not** a flat merge.
+6. Apply via the now-guarded `--from-recs` path. Confirm gate before any write touching >10 notes; content-read gate for borderline disambiguation.
+
+### Explicitly out of v1 (YAGNI)
+
+- The seeded DE↔EN dictionary (decision A).
+- `--max-count N` threshold (open-q2 tail).
+- A dedicated low-frequency listing sidecar — the audit report already lists singletons.
+
+### Build discipline
+
+- TDD, guard first (RED→GREEN): a cross-language rec with an invented target must abort; every existing engine rec (merge/rename/nest/removal) must still pass unchanged.
+- Built and validated on a throwaway/fixture vault. The production Nexus vault is a separate, user-gated run — not part of the build session.
+
 ## Provenance
 
 Distilled from the 2026-06-28 Obi session on the Nexus production vault: singletons 824→772,
