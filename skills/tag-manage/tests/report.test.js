@@ -249,3 +249,41 @@ test('renderProposal: rows within a section are sorted by score descending', () 
   const md = renderProposal({ scope: 'Vault-wide', date: '2026-06-25', clusters });
   assert.ok(md.indexOf('`Market`') < md.indexOf('`Low`'), 'higher score first');
 });
+
+// --- #236 Scan Coverage section: the _-folder blindspot made honest ---------
+
+test('renderReport: a non-protected excluded _-folder is surfaced with its note count (0 is not "clean")', () => {
+  const md = renderReport({ ...data, excluded: [{ folder: '_Work', noteCount: 30, protected: false }] });
+  assert.match(md, /Scan Coverage/);
+  assert.match(md, /`_Work`/);
+  assert.match(md, /\b30\b/);
+  // The honesty line: findings cover scanned scope only.
+  assert.match(md, /scanned/i);
+});
+
+test('renderReport: the warning headline sums only NON-protected excluded notes (the "missing" count)', () => {
+  const md = renderReport({ ...data, excluded: [
+    { folder: '_Work', noteCount: 30, protected: false },
+    { folder: '_Personal', noteCount: 12, protected: false },
+    { folder: '_trash', noteCount: 99, protected: true }, // must NOT inflate the headline
+  ] });
+  assert.match(md, /\b42\b/, 'headline counts 30 + 12, not the protected _trash');
+  assert.doesNotMatch(md.split('Health Score')[0], /\b141\b/, 'protected notes must not be added to the missing count');
+});
+
+test('renderReport: protected folders are listed quietly, with NO note count rendered (no _secret leak)', () => {
+  const md = renderReport({ ...data, excluded: [{ folder: '_secret', noteCount: null, protected: true }] });
+  assert.match(md, /`_secret`/);
+  assert.doesNotMatch(md, /null/, 'a suppressed (null) count must never render as the literal "null"');
+});
+
+test('renderReport: no excluded folders -> affirmatively states full coverage', () => {
+  const md = renderReport({ ...data, excluded: [] });
+  assert.match(md, /Scan Coverage/);
+  assert.match(md, /[Ff]ull vault scanned|no folders excluded/);
+});
+
+test('renderReport: excluded omitted entirely (legacy callers) does not throw and affirms full coverage', () => {
+  const md = renderReport(data); // no `excluded` key at all
+  assert.match(md, /Scan Coverage/);
+});

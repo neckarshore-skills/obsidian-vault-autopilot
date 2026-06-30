@@ -95,7 +95,38 @@ function renderFindings(f, a) {
   return parts.join('\n');
 }
 
-function renderReport({ scope, date, analysis: a, findings: f, recommendations: recs, healthScore: h, nestRecommendations: nest = [] }) {
+// #236 Scan Coverage — the _-folder blindspot made honest. tag-manage skips every
+// _-prefixed folder; without this section a finding of `0` reads as "whole vault clean"
+// when real content in _Work/_Personal was never scanned. Non-protected folders get a
+// loud, actionable warning + a per-folder table; protected meta-folders (_trash/_secret/
+// _vault-autopilot) get a quiet one-liner with no count (the _secret count is suppressed
+// upstream to null). Folder names are backtick-wrapped (no bare #token -> linter-inert).
+function renderScanCoverage(excluded) {
+  const ex = Array.isArray(excluded) ? excluded : [];
+  const nonProtected = ex.filter((e) => !e.protected);
+  const protectedEx = ex.filter((e) => e.protected);
+  const parts = ['## Scan Coverage\n'];
+  if (ex.length === 0) {
+    parts.push('Full vault scanned — no folders excluded.');
+    return parts.join('\n');
+  }
+  if (nonProtected.length) {
+    const missing = nonProtected.reduce((s, e) => s + (typeof e.noteCount === 'number' ? e.noteCount : 0), 0);
+    const n = nonProtected.length;
+    parts.push(`> [!warning] ${n} ${n === 1 ? 'folder' : 'folders'} excluded from this scan (${fmt(missing)} ${missing === 1 ? 'note' : 'notes'})`);
+    parts.push(`> The audit skips every \`_\`-prefixed folder. The findings below cover the **scanned** vault only — a count of \`0\` does **not** mean these folders are clean. Move a folder out from under its \`_\` prefix to bring it into scope (configurable inclusion is a planned follow-up).`);
+    parts.push('');
+    parts.push(table(['Folder', 'Notes'], nonProtected.map((e) => [`\`${e.folder}\``, fmt(e.noteCount)])));
+  }
+  if (protectedEx.length) {
+    if (nonProtected.length) parts.push('');
+    const names = protectedEx.map((e) => `\`${e.folder}\``).join(', ');
+    parts.push(`Protected meta-folders (always skipped by design): ${names}.`);
+  }
+  return parts.join('\n');
+}
+
+function renderReport({ scope, date, analysis: a, findings: f, recommendations: recs, healthScore: h, nestRecommendations: nest = [], excluded = [] }) {
   const lines = [];
   lines.push(`---\ntitle: 'Tag Analysis Report - ${scope} - ${date}'\ndescription: 'Automated tag audit by Obsidian Vault Autopilot.'\ntype: inbox\nstatus: draft\ncreated: ${date}\ntags:\n  - ${REPORT_MARKER_TAG}\n---\n`);
   lines.push(`# Tag Analysis Report\n`);
@@ -104,6 +135,7 @@ function renderReport({ scope, date, analysis: a, findings: f, recommendations: 
     ['Total notes', fmt(a.totalNotes)], ['Tagged', fmt(a.taggedNotes)], ['Untagged', fmt(a.untaggedNotes)],
     ['Unique tags', fmt(a.uniqueTags)], ['Avg tags/note', a.avgTagsPerNote], ['Max depth', a.maxDepth], ['Singletons', fmt(a.singletons.length)],
   ]) + '\n');
+  lines.push(renderScanCoverage(excluded) + '\n');
   lines.push(`## Top 20 Tags\n\n` + table(['#', 'Tag', 'Count', '% tagged'], a.topN.map((t, i) => [i + 1, `\`${t.display}\``, fmt(t.noteCount), `${t.pct}%`])) + '\n');
   lines.push(`## Findings\n\n` + renderFindings(f, a) + '\n');
   lines.push(`## Recommendations\n\n` + (recs.length ? table(['#', 'Action', 'From', 'To', 'Notes', 'Note'], recs.map((r) => [

@@ -243,6 +243,8 @@ A `#tag`-looking token is left **byte-for-byte untouched** when it sits inside: 
 
 Files and folders starting with `_` or `.` are excluded from walks (`_trash/`, `_secret/`, `.obsidian/`, `_vault-autopilot.md`). `node_modules` is also excluded.
 
+This exclusion is **not silent**: the audit report's **Scan Coverage** section names every `_`-prefixed folder that held markdown but was skipped, with its note count — so a finding of `0` is never read as "the whole vault is clean" when real content lives in `_Work/`, `_Personal/`, etc. Protected meta-folders (`_trash/`, `_secret/`, `_vault-autopilot/`) are listed quietly as expected skips, and `_secret/`'s note count is suppressed (privacy). Bringing an excluded folder into scope is a deliberate user action (move it out from under its `_` prefix); a configurable include is a planned follow-up, kept out of the default so deleted notes and secrets are never scanned by accident.
+
 Production-vault runs follow the repo's **Production Vault Safety Rules** (gate before switching vaults; confirm before touching more than 10 files; read-only operations also require explicit approval for production vaults).
 
 ## Report format
@@ -252,6 +254,7 @@ The vault-written Markdown report contains:
 - YAML frontmatter (`type: inbox`, `status: draft`, tagged `Meta/TagManagement`)
 - Summary callout (scope, note count, unique tags, coverage %, recommendation count)
 - Key Metrics table (totals, avg tags/note, max depth, singletons)
+- Scan Coverage section (excluded `_`-folders + note counts, or an affirmative "full vault scanned")
 - Top 20 Tags table (tag, count, % of tagged notes)
 - Recommendations table (id, action + severity, from, to, notes affected, source / "verify casing" notice)
 - Next Steps callout (prompts: "apply all", "apply 1, 3", "skip 2")
