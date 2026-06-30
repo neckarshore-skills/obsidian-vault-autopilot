@@ -194,6 +194,26 @@ A nest is a rename onto a slash path, so it rides the same `applyOps` + survival
 
 > **Phase boundary (design note).** Phase 1 is this deterministic declared-hierarchy nesting. The AI-driven version — the model reads note *content* and proposes clusters — is **Phase 2**, a separate future skill (`tag-organize`), with its own content-read gate. A name-only guesser was deliberately dropped (Phase 2 supersedes it). See `docs/superpowers/specs/2026-06-22-tag-manage-hierarchy-design.md`.
 
+## Removal candidates (numeric artifacts)
+
+Letter-free numeric junk — `1`, `42`, `1-3`, `2024-01` (Apple-import numbering, backlog ids) — is invalid as a tag and never a real label. A normal `audit` run surfaces these as **removal candidates**:
+
+- a **Removal candidates (opt-in)** section in the report (tag + affected-note count), and
+- a **separate** `.tag-manage-removals.json` sidecar in the report directory.
+
+They are kept **out** of `.tag-manage-recommendations.json` and out of the default "apply all" — removal is destructive and irreversible (git is the only undo), so it is **opt-in per id**. Only `numeric-artifact` tags qualify; letter-bearing invalids (`Make.com`, `2prio`) and any valid tag are never proposed for removal. **Review each candidate** before applying — a bare `2025` or `42` can be an intentional year or count, not junk.
+
+**Apply a removal** through the normal Stage-2 path (no new flags) — point `--from-recs` at the removals sidecar:
+
+```bash
+node ".../cli.js" plan  <vault> --from-recs .tag-manage-removals.json --ids 1,2          # dry-run preview
+node ".../cli.js" apply <vault> --from-recs .tag-manage-removals.json --ids 1,2 --write   # after confirm
+```
+
+A removal rides the same `applyOps` + survival + mass-change guards and the same confirm gate as every other op — an artifact on many notes (an Apple-import `1`) trips the mass-change guard and aborts unless `--max` is raised, by design. It **converges**: once removed, a re-audit proposes it no more and clears the sidecar to `[]`.
+
+> **Scope (design note).** This is Slice 1a of the low-frequency review — the deterministic, model-free half. German↔English singleton merges and content clusters are **Slice 2** (`tag-organize`, AI layer). Singular/plural near-duplicate merges are a separate later slice (direction is a judgment call, deliberately kept out of the deterministic core). See `docs/superpowers/specs/2026-06-28-tag-low-frequency-review-design.md`.
+
 ## Report destination
 
 The audit writes a Markdown report file and a `.tag-manage-recommendations.json` sidecar when a report directory is resolvable. Priority:
@@ -257,6 +277,7 @@ The vault-written Markdown report contains:
 - Scan Coverage section (excluded `_`-folders + note counts, or an affirmative "full vault scanned")
 - Top 20 Tags table (tag, count, % of tagged notes)
 - Recommendations table (id, action + severity, from, to, notes affected, source / "verify casing" notice)
+- Removal candidates section (opt-in numeric-artifact removals: id, tag, notes affected — only when present)
 - Next Steps callout (prompts: "apply all", "apply 1, 3", "skip 2")
 - Health Score table (convention conformity %, tag coverage %, singleton ratio %)
 - Update Log table
