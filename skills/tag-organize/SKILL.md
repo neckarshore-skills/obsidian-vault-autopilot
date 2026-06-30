@@ -149,6 +149,10 @@ End every run with:
   WRITE their report artifacts even without `--report-dir`. A "read-only audit" is not
   strictly read-only when a report home is set; the dated `HHMM` filename keeps same-day
   re-runs from overwriting each other.
+- `_`-prefixed folders are skipped by the scan (shared with `tag-manage`). This is **not
+  silent**: the proposal note's **Scan Coverage** section names every skipped `_`-folder
+  that held markdown, so the cluster proposals are never read as covering the whole vault
+  when real content lives in `_Work/`, `_Personal/`, etc.
 
 ## Quality check
 

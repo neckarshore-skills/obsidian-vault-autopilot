@@ -316,9 +316,12 @@ function resolveReportContext(target, rest) {
 // only for uncertain families, then persists approved clusters via set-hierarchy; the
 // nest itself rides the existing applyOps path (no new write code in Slice 1).
 function runInduce(dir, { reportDirAbs, date, fileStamp = '', scope = 'Vault-wide', declaredParents = [], brands } = {}) {
+  // Walk once: scanned files + the _-folders the scan skips (#236 blindspot) — the induce
+  // proposal must disclose them too, not just the audit report.
+  const { files, excluded } = walkWithExclusions(dir);
   // Exclude report artifacts before scanning — mirrors runAudit (matters when reportDir is
   // a non-underscore dir that walkMarkdown would otherwise scan, incl. a prior proposal note).
-  const inventory = buildInventory(excludeReportArtifacts(readNotes(dir), dir, reportDirAbs));
+  const inventory = buildInventory(excludeReportArtifacts(files.map((p) => ({ path: p, text: fs.readFileSync(p, 'utf8') })), dir, reportDirAbs));
   // brands keeps internal-camelCase brand names whole (LinkedIn, not Linked) for parent naming.
   const clusters = clusterByName(inventory, { brands }).map((c) => ({ ...c, ...scoreCluster(c, { declaredParents }) }));
   const outDir = reportDirAbs || dir;
@@ -331,7 +334,7 @@ function runInduce(dir, { reportDirAbs, date, fileStamp = '', scope = 'Vault-wid
   let notePath = null;
   if (reportDirAbs) {
     notePath = path.join(reportDirAbs, `${date}${fileStamp ? ' ' + fileStamp : ''} Tag Organize Proposal - ${scope}.md`);
-    fs.writeFileSync(notePath, renderProposal({ scope, date, clusters }), 'utf8');
+    fs.writeFileSync(notePath, renderProposal({ scope, date, clusters, excluded }), 'utf8');
   }
   return { clusters, outPath, notePath };
 }
