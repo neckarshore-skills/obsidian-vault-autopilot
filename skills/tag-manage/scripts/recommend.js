@@ -62,8 +62,12 @@ function buildRecommendations(inventory, dict, notes) {
         .filter((t) => applyOps(t, ops).changed)
         .length;
     }
+    // targetMayBeNew: this is an ENGINE-authored rec whose canonical `to` is a deterministically
+    // computed correct spelling that may not yet exist as its own tag (a fold/rename). It is the
+    // trusted opt-out from the apply-boundary both-exist guard (validate.js). Model-authored
+    // cross-language merges carry NO such marker -> they get the strict both-exist check.
     recs.push({ id: ++id, kind, severity: classifyTag(r.display, ctx).severity || 'MEDIUM',
-      from, to: canonical, notesAffected, source, ops });
+      from, to: canonical, notesAffected, source, ops, targetMayBeNew: true });
   }
   recs.sort((a, b) => b.notesAffected - a.notesAffected || a.from.localeCompare(b.from));
   recs.forEach((rr, i) => { rr.id = i + 1; });

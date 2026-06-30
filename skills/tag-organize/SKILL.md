@@ -1,6 +1,6 @@
 ---
 name: tag-organize
-description: Use when an Obsidian vault's flat tags should be organized into a nested hierarchy by proposing parent/child families over EXISTING tags. Trigger phrases - "organize tags", "tag hierarchy", "group my tags", "tag structure", "nest my flat tags", "tag optimization", "restructure tags", "structure my tags". Runs AFTER tag-manage cleanup (hygiene first). Slice 1 proposes structure over existing tags only; it does NOT invent tags from note content (that is the later auto-tag slice, not yet built).
+description: Use when an Obsidian vault's flat tags should be organized into a nested hierarchy over EXISTING tags, OR when a bilingual vault has the same concept tagged in two languages that should be merged. Trigger phrases - "organize tags", "tag hierarchy", "group my tags", "tag structure", "nest my flat tags", "tag optimization", "restructure tags", "structure my tags", "merge my German and English tags", "merge cross-language tags", "bilingual tag merge", "DE/EN tag merge", "merge duplicate tags in two languages". Runs AFTER tag-manage cleanup (hygiene first). Proposes structure and cross-language merges over existing tags only; it does NOT invent tags from note content (that is the later auto-tag slice, not yet built).
 ---
 
 # Tag Organize
@@ -119,6 +119,69 @@ A nest is a rename onto a slash path, so it rides the same `applyOps` + survival
 mass-change guards + confirm gate as every other op, and it **converges** (an
 already-nested tag yields no further nest).
 
+## Cross-language merge (Slice 2)
+
+A bilingual vault tags the same concept twice — `Versicherung` and `Insurance`,
+`Skalierung` and `Scaling` — and each half is a low-frequency singleton. This flow
+finds those DE<->EN pairs and merges them. Translation is **model judgement**; the
+engine does only the byte-level rename and the safety guard. There is no seeded
+dictionary in v1 — you translate natively.
+
+**1. Read the low-frequency list.** Run `audit` with a report home so the report
+lists singletons + doubletons:
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/skills/tag-manage/scripts/cli.js" audit "${OBSIDIAN_VAULT_PATH}" --report-dir <dir>
+```
+
+**2. Identify DE<->EN pairs where BOTH halves exist in the inventory.** Only propose a
+merge when the target tag already exists — never invent a target tag the vault does
+not use. The German half merges into the English half by **default direction by
+language** (English-canonical). A German-primary vault overrides this with
+`crossLanguageCanonical: "de"` in `Tag Manage Config.md` — direction is by language,
+not by frequency.
+
+**3. Split confident from borderline.** A merge with a clear translation and the same
+scope is **confident**. A merge that **narrows or shifts meaning** (e.g. a broad
+German term whose English candidate is more specific) is **borderline** — flag it,
+read a bounded note sample under the content-read gate, and never auto-apply it.
+
+**4. Write the confirmed merges to a sidecar** `.tag-organize-merges.json` as recs.
+Each rec carries `kind: "merge"` and `source: "cross-language"` (metadata for the
+report). You do **not** need a flag to arm the safety guard — the apply boundary applies
+the both-exist check to any model-authored merge by default (see step 6). A DE<->EN merge
+is mechanically a rename op:
+
+```json
+[
+  { "kind": "merge", "source": "cross-language",
+    "ops": [{ "type": "rename", "from": "versicherung", "to": "Insurance" }] }
+]
+```
+
+**5. Cross-language clusters use the nest path, not a flat merge.** A family like
+`Fördermittel*` + `Funding` becomes a nest-under-a-parent proposal via `set-hierarchy`
+(the Slice 1 flow above), not a single merge.
+
+**6. Apply via the guarded `--from-recs` path.** Same confirm gate and guards as every
+other op:
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/skills/tag-manage/scripts/cli.js" plan  "${OBSIDIAN_VAULT_PATH}" --from-recs <dir>/.tag-organize-merges.json
+# Human gate: "I will merge N cross-language tag pairs in <vault>. Confirm?" — wait for yes.
+node "${CLAUDE_PLUGIN_ROOT}/skills/tag-manage/scripts/cli.js" apply "${OBSIDIAN_VAULT_PATH}" --from-recs <dir>/.tag-organize-merges.json --write
+```
+
+The apply boundary runs a two-tier validator on every `--from-recs` sidecar. Tier 1
+(universal) rejects any op whose `from` tag is not in the live inventory or whose
+rename target is malformed. Tier 2 (the both-exist guard) is the **default** for every
+rename: the merge **target** must already exist in the inventory — this is what stops a
+wholesale translation of the vault's tag language. Only engine-authored recs (the nest
+and convention-fold paths, whose target is legitimately new) opt out, via an
+engine-set `targetMayBeNew` marker that a model sidecar never carries. So a merge you
+author is held to both-exist whether or not you stamp `source` — safety is the default,
+not an opt-in. Any violation aborts the run (`ABORTED`, exit non-zero, nothing written).
+
 ## Report format
 
 End every run with:
@@ -130,12 +193,14 @@ End every run with:
 - Proposed N candidate families
 - Approved + persisted M clusters (set-hierarchy)
 - Applied K nests (<note counts>)
+- Merged J cross-language pairs (DE<->EN, <note counts>)
 
 ### Findings (reported, not fixed)
 - <adjacent tag-hygiene observations -> tag-manage>
 
 ### Deferred
 - <families left for content review, or skipped>
+- <borderline cross-language pairs (meaning narrows/shifts) left unmerged>
 ```
 
 ## Known limitations (Slice 1)
@@ -153,6 +218,12 @@ End every run with:
   silent**: the proposal note's **Scan Coverage** section names every skipped `_`-folder
   that held markdown, so the cluster proposals are never read as covering the whole vault
   when real content lives in `_Work/`, `_Personal/`, etc.
+- Cross-language merge (Slice 2) is **model-driven, no seeded dictionary** — translation
+  quality is yours, not the engine's. The both-exist guard enforces that the merge target
+  already exists in the vault (safety-by-default: it applies to any model-authored merge,
+  stamped or not), but it **cannot catch a wrong-but-real translation** — merging into the
+  wrong existing tag passes the guard. Review confident vs. borderline pairs yourself; the
+  guard prevents inventing a target, not choosing the wrong one.
 
 ## Quality check
 
