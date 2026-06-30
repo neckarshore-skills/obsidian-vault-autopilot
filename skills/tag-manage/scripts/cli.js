@@ -35,17 +35,70 @@ class MassChangeError extends Error {
   }
 }
 
-// Walk *.md, skipping dirs/files starting with '.' or '_' (plugin-reserved /
-// protected — _trash, _secret, .obsidian, _vault-autopilot.md) and node_modules.
-function walkMarkdown(dir) {
-  const out = [];
+// _-folders the scan must NEVER reach — deleted notes, secrets, plugin state.
+// Used ONLY to classify the exclusion REPORT (loud warning vs quiet one-liner);
+// it does not change WHAT is scanned (every _-folder is skipped, same as before).
+const PROTECTED_UNDERSCORE = new Set(['_trash', '_secret', '_vault-autopilot']);
+// Privacy: never emit how many notes live in these — a count is itself a small leak.
+const COUNT_SUPPRESSED_UNDERSCORE = new Set(['_secret']);
+
+// Count *.md recursively under an excluded dir, skipping only dot-dirs/node_modules.
+// A nested _-folder IS user content -> its notes fold into the parent's count (the
+// exclusion is reported at top-most-excluded granularity, not per nested level).
+function countMarkdown(dir) {
+  let n = 0;
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (e.name.startsWith('.') || e.name.startsWith('_') || SKIP_DIRS.has(e.name)) continue;
+    if (e.name.startsWith('.') || SKIP_DIRS.has(e.name)) continue;
     const full = path.join(dir, e.name);
-    if (e.isDirectory()) out.push(...walkMarkdown(full));
-    else if (e.isFile() && e.name.endsWith('.md')) out.push(full);
+    if (e.isDirectory()) n += countMarkdown(full);
+    else if (e.isFile() && e.name.endsWith('.md')) n += 1;
   }
-  return out;
+  return n;
+}
+
+// Single-pass walk. Returns scanned *.md files (identical to the old walkMarkdown)
+// AND the _-folders that were skipped — the #236 blindspot: walkMarkdown silently
+// drops every _-prefixed folder, so real content in _Work/_Personal vanishes from
+// every scan and a finding of `0` reads as "whole vault clean". excluded reports each
+// top-most skipped _-folder that holds markdown, flags protected meta-folders, and
+// suppresses _secret's count. Scan behavior is UNCHANGED — .files === walkMarkdown(dir).
+function walkWithExclusions(dir, root = dir) {
+  const files = [];
+  const excluded = [];
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (e.name.startsWith('.') || SKIP_DIRS.has(e.name)) continue; // dot / node_modules: outside the partition, never reported
+    const full = path.join(dir, e.name);
+    if (e.name.startsWith('_')) {
+      // A skipped _-entry. Only folders that actually hold markdown are worth surfacing.
+      if (e.isDirectory()) {
+        const noteCount = countMarkdown(full);
+        if (noteCount > 0) {
+          excluded.push({
+            folder: path.relative(root, full),
+            noteCount: COUNT_SUPPRESSED_UNDERSCORE.has(e.name) ? null : noteCount,
+            protected: PROTECTED_UNDERSCORE.has(e.name),
+          });
+        }
+      }
+      continue; // never recurse-for-scan into a _-entry (scan behavior preserved)
+    }
+    if (e.isDirectory()) {
+      const sub = walkWithExclusions(full, root);
+      files.push(...sub.files);
+      excluded.push(...sub.excluded);
+    } else if (e.isFile() && e.name.endsWith('.md')) {
+      files.push(full);
+    }
+  }
+  if (dir === root) excluded.sort((a, b) => a.folder.localeCompare(b.folder, 'en', { sensitivity: 'base' }));
+  return { files, excluded };
+}
+
+// Back-compat: *.md paths only, skipping dirs/files starting with '.' or '_'
+// (plugin-reserved / protected — _trash, _secret, .obsidian, _vault-autopilot.md)
+// and node_modules. Callers that need the skipped-folder report use walkWithExclusions.
+function walkMarkdown(dir) {
+  return walkWithExclusions(dir).files;
 }
 
 function readNotes(dir) {
@@ -131,10 +184,14 @@ function excludeReportArtifacts(notes, dir, reportDirAbs) {
 
 function runAudit(dir, { date, fileStamp = '', defaultsPath, configText, reportDirAbs, nameSuffix = '' }) {
   const dict = loadConfig({ defaultsPath, configText });
+  // Walk once: scanned files + the _-folders the scan skips (#236 blindspot).
+  // excluded feeds the report's Scan Coverage section so a finding of `0` is never
+  // read as "whole vault clean" when real content sits in _Work/_Personal/etc.
+  const { files, excluded } = walkWithExclusions(dir);
   // Exclude only report artifacts inside reportDirAbs — never real notes.
   // This prevents a written report note from poisoning the next audit scan,
   // while keeping every real note in scope even when reportDirAbs == the vault root.
-  const notes = excludeReportArtifacts(readNotes(dir), dir, reportDirAbs);
+  const notes = excludeReportArtifacts(files.map((p) => ({ path: p, text: fs.readFileSync(p, 'utf8') })), dir, reportDirAbs);
   const inventory = buildInventory(notes);
   const findings = auditFindings(notes);
   const analysis = analyze(notes, inventory);
@@ -150,7 +207,7 @@ function runAudit(dir, { date, fileStamp = '', defaultsPath, configText, reportD
   const coveragePct = analysis.totalNotes ? Math.round((analysis.taggedNotes / analysis.totalNotes) * 100) : 0;
   const singletonRatioPct = inventory.length ? Math.round((analysis.singletons.length / inventory.length) * 100) : 0;
   const report = renderReport({ scope: 'Vault-wide', date, analysis, findings,
-    recommendations, nestRecommendations, healthScore: { conformityPct, coveragePct, singletonRatioPct } });
+    recommendations, nestRecommendations, healthScore: { conformityPct, coveragePct, singletonRatioPct }, excluded });
   let reportPath = null;
   if (reportDirAbs) {
     fs.mkdirSync(reportDirAbs, { recursive: true });
@@ -176,7 +233,7 @@ function selectOps(recommendations, selection) {
   return picked.flatMap((r) => r.ops);
 }
 
-module.exports = { walkMarkdown, readNotes, auditVault, applyToVault, planVault, MassChangeError, DEFAULT_MASS_CHANGE_THRESHOLD, runAudit, selectOps, runInduce, reportStamp, excludeReportArtifacts };
+module.exports = { walkMarkdown, walkWithExclusions, readNotes, auditVault, applyToVault, planVault, MassChangeError, DEFAULT_MASS_CHANGE_THRESHOLD, runAudit, selectOps, runInduce, reportStamp, excludeReportArtifacts };
 
 // ---- CLI -------------------------------------------------------------------
 

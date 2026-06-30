@@ -7,7 +7,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const { walkMarkdown, auditVault, planVault, applyToVault, MassChangeError, runAudit, selectOps, runInduce, reportStamp, excludeReportArtifacts } = require('../scripts/cli.js');
+const { walkMarkdown, walkWithExclusions, auditVault, planVault, applyToVault, MassChangeError, runAudit, selectOps, runInduce, reportStamp, excludeReportArtifacts } = require('../scripts/cli.js');
 
 function tmpVault(files) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tagm-'));
@@ -29,6 +29,129 @@ test('walkMarkdown: *.md only, skips _ and . prefixed dirs/files', () => {
   });
   const seen = walkMarkdown(dir).map((p) => path.basename(p)).sort();
   assert.deepEqual(seen, ['a.md']);
+});
+
+// ---- #236 _-folder blindspot: walkWithExclusions surfaces what was skipped ----
+// walkMarkdown silently skips every _-folder (intended for _trash/_vault-autopilot),
+// so real content in _Work/_Personal is excluded from every scan and a finding of
+// `0` reads as "whole vault clean". walkWithExclusions makes the skipped set visible
+// WITHOUT changing what gets scanned (Option 3 of the spec; config opt-in deferred).
+
+const findExcl = (excluded, folder) => excluded.find((e) => e.folder === folder);
+
+test('walkWithExclusions: .files is byte-identical to walkMarkdown (scan behavior unchanged)', () => {
+  const dir = tmpVault({
+    'a.md': '---\ntags:\n  - ai\n---\nx\n',
+    'Projects/b.md': '---\ntags:\n  - ai\n---\nx\n',
+    '_Work/w.md': '---\ntags:\n  - ai\n---\nx\n',
+    '_trash/t.md': 'deleted\n',
+    '.obsidian/d.md': 'config\n',
+  });
+  assert.deepEqual(walkWithExclusions(dir).files, walkMarkdown(dir),
+    'the scan-walk and the back-compat wrapper must return the identical file list');
+});
+
+test('walkWithExclusions: a non-protected _-folder is reported with its note count', () => {
+  const dir = tmpVault({
+    'a.md': '---\ntags:\n  - ai\n---\nx\n',
+    '_Work/w1.md': '---\ntags:\n  - ai\n---\nx\n',
+    '_Work/w2.md': '---\ntags:\n  - ml\n---\nx\n',
+  });
+  const { files, excluded } = walkWithExclusions(dir);
+  assert.deepEqual(files.map((p) => path.basename(p)), ['a.md']);
+  assert.deepEqual(findExcl(excluded, '_Work'), { folder: '_Work', noteCount: 2, protected: false });
+});
+
+test('walkWithExclusions: protected folders are flagged; _trash carries a count', () => {
+  const dir = tmpVault({
+    'a.md': '---\ntags:\n  - ai\n---\nx\n',
+    '_trash/t1.md': 'deleted\n',
+    '_trash/t2.md': 'deleted\n',
+  });
+  const { excluded } = walkWithExclusions(dir);
+  assert.deepEqual(findExcl(excluded, '_trash'), { folder: '_trash', noteCount: 2, protected: true });
+});
+
+test('walkWithExclusions: _secret is flagged protected with a SUPPRESSED count (no leak of how many secret notes exist)', () => {
+  const dir = tmpVault({
+    'a.md': '---\ntags:\n  - ai\n---\nx\n',
+    '_secret/s1.md': 'token\n',
+    '_secret/s2.md': 'token\n',
+  });
+  const { excluded } = walkWithExclusions(dir);
+  assert.deepEqual(findExcl(excluded, '_secret'), { folder: '_secret', noteCount: null, protected: true });
+});
+
+test('walkWithExclusions: nested _ inside an excluded _-folder folds into the parent (one row, summed count)', () => {
+  const dir = tmpVault({
+    'a.md': '---\ntags:\n  - ai\n---\nx\n',
+    '_Work/sub/x.md': '---\ntags:\n  - ai\n---\nx\n',
+    '_Work/_archive/y.md': '---\ntags:\n  - ai\n---\nx\n',
+  });
+  const { excluded } = walkWithExclusions(dir);
+  const workRows = excluded.filter((e) => e.folder.startsWith('_Work'));
+  assert.equal(workRows.length, 1, 'a nested _ folder must not produce a separate excluded row');
+  assert.deepEqual(workRows[0], { folder: '_Work', noteCount: 2, protected: false });
+});
+
+test('walkWithExclusions: a _-folder nested under a normal folder is caught (recursion mirrors walkMarkdown)', () => {
+  const dir = tmpVault({
+    'Projects/real.md': '---\ntags:\n  - ai\n---\nx\n',
+    'Projects/_Work/p.md': '---\ntags:\n  - ai\n---\nx\n',
+  });
+  const { files, excluded } = walkWithExclusions(dir);
+  assert.deepEqual(files.map((p) => path.basename(p)), ['real.md']);
+  assert.deepEqual(findExcl(excluded, path.join('Projects', '_Work')),
+    { folder: path.join('Projects', '_Work'), noteCount: 1, protected: false });
+});
+
+test('walkWithExclusions: an empty _-folder (no .md inside) is not reported (nothing missed)', () => {
+  const dir = tmpVault({
+    'a.md': '---\ntags:\n  - ai\n---\nx\n',
+    '_Work/notes.txt': 'not markdown\n',
+  });
+  assert.deepEqual(walkWithExclusions(dir).excluded, []);
+});
+
+test('walkWithExclusions: excluded is sorted A->Z by folder', () => {
+  const dir = tmpVault({
+    '_Zebra/z.md': 'x\n', '_alpha/a.md': 'x\n', '_Mango/m.md': 'x\n',
+  });
+  const folders = walkWithExclusions(dir).excluded.map((e) => e.folder);
+  assert.deepEqual(folders, [...folders].sort((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' })));
+});
+
+test('walkWithExclusions PARTITION INVARIANT: every .md is scanned XOR under one reported _-folder (dotdirs/node_modules excepted)', () => {
+  const dir = tmpVault({
+    'root.md': 'x\n',
+    'Projects/p.md': 'x\n',
+    '_Work/w.md': 'x\n',
+    '_Work/deep/w2.md': 'x\n',
+    '_trash/t.md': 'x\n',
+    '.obsidian/cfg.md': 'x\n',          // outside the partition (dotdir)
+    'node_modules/pkg/readme.md': 'x\n', // outside the partition
+  });
+  const { files, excluded } = walkWithExclusions(dir);
+  const scanned = new Set(files.map((p) => path.relative(dir, p)));
+  const underExcluded = (rel) => excluded.some((e) => rel === e.folder || rel.startsWith(e.folder + path.sep));
+  const outsidePartition = (rel) => rel.split(path.sep).some((seg) => seg.startsWith('.') || seg === 'node_modules');
+
+  // Walk the raw tree for every .md on disk.
+  const allMd = [];
+  (function raw(d) {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const full = path.join(d, e.name);
+      if (e.isDirectory()) raw(full);
+      else if (e.name.endsWith('.md')) allMd.push(path.relative(dir, full));
+    }
+  })(dir);
+
+  for (const rel of allMd) {
+    if (outsidePartition(rel)) continue;
+    const isScanned = scanned.has(rel);
+    const isExcluded = underExcluded(rel);
+    assert.ok(isScanned !== isExcluded, `${rel} must be EITHER scanned OR under a reported _-folder, never both/neither (scanned=${isScanned} excluded=${isExcluded})`);
+  }
 });
 
 test('auditVault: surfaces orphans and case groups (read-only)', () => {
@@ -133,6 +256,46 @@ test('runInduce writes a .tag-organize-clusters.json proposal from flat residual
   assert.equal(clusters[0].parent, 'Business');
   assert.deepEqual(clusters[0].children.map((c) => c.name), ['business-dev', 'Business-Strategy', 'BusinessModel']);
   assert.equal(res.outPath, sidecar);
+});
+
+// ---- #236: runAudit threads the real _-folder exclusions into the report -----
+
+test('runAudit: the written report surfaces _-folders skipped by the scan (Scan Coverage)', () => {
+  const dir = tmpVault({
+    'a.md': '---\ntags:\n  - research\n---\nbody\n',
+    '_Work/w1.md': '---\ntags:\n  - 7\n---\nbody\n', // a numeric tag the scan will never see
+    '_Work/w2.md': '---\ntags:\n  - 9\n---\nbody\n',
+  });
+  try {
+    const out = runAudit(dir, {
+      date: '2026-06-30',
+      defaultsPath: path.join(__dirname, '..', 'references', 'tag-overrides.default.json'),
+      configText: null,
+      reportDirAbs: null,
+    });
+    // The scanned vault is genuinely clean of numeric artifacts...
+    assert.match(out.report, /Scan Coverage/);
+    // ...but the report must say so was scanned, not the whole vault.
+    assert.match(out.report, /`_Work`/);
+    assert.match(out.report, /\b2\b/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('runAudit: a vault with no _-folders affirms full coverage', () => {
+  const dir = tmpVault({ 'a.md': '---\ntags:\n  - research\n---\nbody\n' });
+  try {
+    const out = runAudit(dir, {
+      date: '2026-06-30',
+      defaultsPath: path.join(__dirname, '..', 'references', 'tag-overrides.default.json'),
+      configText: null,
+      reportDirAbs: null,
+    });
+    assert.match(out.report, /Full vault scanned/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 // ---- selectOps unit tests (Task 9) ----------------------------------------
