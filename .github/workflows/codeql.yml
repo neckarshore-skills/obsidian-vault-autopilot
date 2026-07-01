@@ -13,18 +13,23 @@ on:
   schedule:
     - cron: "0 6 * * 1"
 
-# Least-privilege: read the code, write findings to the Security tab. For a
-# public repo with build-mode none these two are the documented minimum
-# (actions:read / packages:read are private-repo / build extras — not needed).
+# Least-privilege default: read-only at the workflow level. The write scope
+# (security-events, to upload findings to the Security tab) is granted only on
+# the analyze job below — Scorecard Token-Permissions rewards job-scoped writes.
 permissions:
   contents: read
-  security-events: write
 
 jobs:
   analyze:
     name: analyze
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # Only this job needs to write analysis results. For a public repo with
+    # build-mode none, contents:read + security-events:write is the documented
+    # minimum (actions:read / packages:read are private-repo / build extras).
+    permissions:
+      contents: read
+      security-events: write
     strategy:
       fail-fast: false
       matrix:
