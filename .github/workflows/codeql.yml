@@ -1,0 +1,45 @@
+name: codeql
+
+# Static analysis (OpenSSF Scorecard SAST). Analyzes the real code surface:
+# JavaScript and Python. Shell is not a CodeQL-supported language, so it is
+# out of scope here. build-mode is "none" because neither language compiles in
+# this repo. Runs on ubuntu-latest (the test.yml suites need macOS; CodeQL does
+# not) on push/PR to main and weekly, so drift is caught even without a PR.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 6 * * 1"
+
+# Least-privilege: read the code, write findings to the Security tab. For a
+# public repo with build-mode none these two are the documented minimum
+# (actions:read / packages:read are private-repo / build extras — not needed).
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  analyze:
+    name: analyze
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [javascript-typescript, python]
+    steps:
+      # All Action refs pinned to full commit SHAs (Pinned-Dependencies).
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@dd903d2e4f5405488e5ef1422510ee31c8b32357 # v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@dd903d2e4f5405488e5ef1422510ee31c8b32357 # v3
+        with:
+          category: "/language:${{ matrix.language }}"

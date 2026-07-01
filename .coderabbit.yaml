@@ -1,0 +1,25 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+#
+# CodeRabbit configuration (OpenSSF Scorecard Code-Review: an automated reviewer
+# on every PR without requiring a second human on this solo/small-team repo).
+#
+# NOTE: This file is INERT until the CodeRabbit GitHub App is installed on
+# neckarshore-skills/obsidian-vault-autopilot. Installing a GitHub App is an
+# org-admin web-UI action and cannot be done from the CLI — see the remediation
+# report's user-action item. CodeRabbit reviews and comments; it never edits code.
+#
+# request_changes_workflow is false on purpose: CodeRabbit advises, it does not
+# gate merges. Branch protection does not require its approval (a solo repo must
+# stay self-mergeable). "AI empfiehlt, Mensch entscheidet."
+language: en-US
+reviews:
+  profile: chill
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: true
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - main
