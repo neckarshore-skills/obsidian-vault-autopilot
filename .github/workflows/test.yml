@@ -1,5 +1,11 @@
 name: test
 
+# Least-privilege default token: this workflow only checks out and runs the
+# read-only assertion suites, so read access to repo contents is all it needs
+# (OpenSSF Scorecard Token-Permissions; D4 fail-closed).
+permissions:
+  contents: read
+
 # Runs every assertion suite under scripts/test-*.sh on push and PR.
 # Phase 1 of docs/plans/2026-06-11-skill-hardening-fable-pilot.md — before
 # this workflow existed, the suites ran only when someone remembered to.
@@ -19,7 +25,9 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      # Pinned to a full commit SHA (OpenSSF Scorecard Pinned-Dependencies).
+      # The trailing comment keeps the human-readable version for Dependabot bumps.
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Run all assertion suites
         run: |

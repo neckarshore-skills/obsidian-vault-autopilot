@@ -1,0 +1,10 @@
+# Keeps GitHub Actions references current (OpenSSF Scorecard Dependency-Update-Tool).
+# Only the github-actions ecosystem applies: the repo is JavaScript + Shell + Python
+# with no package.json / npm manifest, so there is nothing for an npm updater to lock.
+# Add an "npm" block here only if a package.json is ever introduced.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
