@@ -178,6 +178,16 @@ See each skill's Parameters section for available options.
 Skills work on **Markdown and YAML frontmatter** — not on Obsidian APIs.
 Move your vault to another Markdown tool tomorrow. These skills still work.
 
+## Testing & Validation
+
+Every launch-scope skill went through **multipass testing** before shipping — synthetic test vaults first, then real-vault clones, then a full production-scale run, each pass looking specifically for new regressions rather than a fixed pass/fail script.
+
+**Cycle 4 (final pre-launch validation, 4 Gold Runs × 4 skills = 16 cells):** 100% effective — 0 new Class-A (data-loss-class) regressions across all 16 cells. The final production-scale run (GR-4, ~1,300 real notes) enriched 312 notes, renamed 10 files, sorted 127 inbox files, and generated 8 descriptions — 0 Class-A findings.
+
+**v0.3.0 live UAT** (real vault, 1,244 notes): 733 property reorders applied, 0 violations, 328 notes modified, 12 titles fixed, 0 data loss.
+
+**Automated test suite** (this repo, run continuously in CI): 293 unit-test assertions (`node --test`) plus 13 shell-based validation suites covering cross-platform edge cases (Windows trailing-dot folders, clone-integrity, YAML sanity, recipe conformance) — all green, 0 failures.
+
 ## Contributing
 
 Found a bug? Have a skill idea? **[Open an issue](https://github.com/neckarshore-skills/obsidian-vault-autopilot/issues)** — that's how we track and prioritize all work. New skill proposals start as issues, not pull requests.
