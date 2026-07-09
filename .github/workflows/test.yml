@@ -27,7 +27,7 @@ jobs:
     steps:
       # Pinned to a full commit SHA (OpenSSF Scorecard Pinned-Dependencies).
       # The trailing comment keeps the human-readable version for Dependabot bumps.
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Run all assertion suites
         run: |
@@ -84,7 +84,7 @@ jobs:
     steps:
       # Default persist-credentials (true) — the publish step pushes stats.json to the UNPROTECTED
       # stats-data branch via the job's contents:write GITHUB_TOKEN (github-actions[bot]).
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       # Uses the runner's preinstalled node — the SAME node the assertion-suites gate runs on (the
       # gate has no setup-node step either), so the count is taken on the identical toolchain.
