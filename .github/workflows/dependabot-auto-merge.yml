@@ -31,9 +31,9 @@ jobs:
 
       # Safe class per the adopted policy:
       #   - patch          (any ecosystem)
-      #   - github-actions (any update-type — first-party trusted actions, CI-gated)
+      #   - github-actions (NON-MAJOR only — actions-majors go manual per the cohort-1 PIR)
       #   - minor          (dev-dependency only)
-      # Everything else (runtime minor, any non-actions major) falls through to manual review.
+      # Everything else (runtime minor, ANY major incl. actions) falls through to manual review.
       #
       # Green CI is the HARD gate: `--auto` holds the merge until every required check passes
       # on the final (rebased) head, so a bump that breaks a required check never merges, and
@@ -41,7 +41,8 @@ jobs:
       - name: Enable auto-merge for the safe class
         if: >
           steps.meta.outputs.update-type == 'version-update:semver-patch' ||
-          steps.meta.outputs.package-ecosystem == 'github_actions' ||
+          (steps.meta.outputs.package-ecosystem == 'github_actions' &&
+           steps.meta.outputs.update-type != 'version-update:semver-major') ||
           (steps.meta.outputs.update-type == 'version-update:semver-minor' &&
            steps.meta.outputs.dependency-type == 'direct:development')
         run: gh pr merge --auto --squash "$PR_URL"
