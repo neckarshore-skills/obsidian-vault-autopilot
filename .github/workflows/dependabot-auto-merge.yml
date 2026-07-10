@@ -1,0 +1,50 @@
+name: Dependabot auto-merge
+
+# Auto-merges the SAFE class of Dependabot PRs once the repo's required checks pass.
+# Policy: neckarshore-planning/docs/specs/dependabot-auto-merge-policy.md (ADOPTED 2026-07-10).
+#
+# `on: pull_request` (NOT pull_request_target) — GitHub's official auto-merge pattern.
+# For first-party Dependabot PRs the elevated `permissions:` block grants the built-in
+# GITHUB_TOKEN the write scope `gh pr merge --auto` needs. The job never checks out or
+# runs PR code, so there is no untrusted-code execution surface. pull_request_target is
+# unnecessary here and would needlessly expose the base-branch secret context — avoided
+# by design (least-privilege, #270 spirit).
+on: pull_request
+
+# Least-privilege: exactly the two scopes `gh pr merge --auto` requires (#270 §3.1).
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  dependabot-auto-merge:
+    runs-on: ubuntu-latest
+    # Guard: only ever act on first-party Dependabot PRs.
+    if: github.actor == 'dependabot[bot]'
+    steps:
+      # Third-party action pinned to a full commit SHA (#270 §3.2 — Pinned-Dependencies).
+      - name: Fetch Dependabot metadata
+        id: meta
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+        with:
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
+
+      # Safe class per the adopted policy:
+      #   - patch          (any ecosystem)
+      #   - github-actions (any update-type — first-party trusted actions, CI-gated)
+      #   - minor          (dev-dependency only)
+      # Everything else (runtime minor, any non-actions major) falls through to manual review.
+      #
+      # Green CI is the HARD gate: `--auto` holds the merge until every required check passes
+      # on the final (rebased) head, so a bump that breaks a required check never merges, and
+      # rebase churn is absorbed without a human babysitting the PR.
+      - name: Enable auto-merge for the safe class
+        if: >
+          steps.meta.outputs.update-type == 'version-update:semver-patch' ||
+          steps.meta.outputs.package-ecosystem == 'github_actions' ||
+          (steps.meta.outputs.update-type == 'version-update:semver-minor' &&
+           steps.meta.outputs.dependency-type == 'direct:development')
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

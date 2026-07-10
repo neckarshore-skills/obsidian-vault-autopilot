@@ -2,9 +2,20 @@
 # Only the github-actions ecosystem applies: the repo is JavaScript + Shell + Python
 # with no package.json / npm manifest, so there is nothing for an npm updater to lock.
 # Add an "npm" block here only if a package.json is ever introduced.
+#
+# Grouping (auto-merge policy 2026-07-10): minor + patch action bumps collapse into ONE
+# weekly grouped PR (fewer PRs, atomic merges — self-clears via the auto-merge workflow).
+# Majors are deliberately left UNGROUPED so each surfaces as its own PR for human review.
 version: 2
 updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      github-actions-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
