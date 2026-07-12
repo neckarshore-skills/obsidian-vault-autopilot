@@ -39,9 +39,12 @@ views:
     groupBy:                  # optional
       property: property_name
       direction: ASC | DESC
+    sort:                     # optional — orders ROWS (order[] only picks columns)
+      - property: formula.age_days
+        direction: DESC       # ASC | DESC; list order = sort priority
     filters:                  # view-specific, ANDed with global
       and: []
-    order:                    # properties shown, in order
+    order:                    # properties shown (COLUMNS), in order
       - file.name
       - property_name
       - formula.formula_name

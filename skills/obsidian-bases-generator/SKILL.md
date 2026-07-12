@@ -1,7 +1,7 @@
 ---
 name: obsidian-bases-generator
 status: beta
-description: Use when the user wants a live, database-like dashboard over their Obsidian notes — a Base (.base file) that filters, groups, or tables notes by their properties or tags. Trigger phrases - "create a dashboard", "generate a base", "make a Bases view", "build a table view of my notes", "Dashboard bauen", "Base generieren", "Übersicht erstellen", "show all notes with status X", "surface my draft backlog", "notes missing a property". Also trigger when the user mentions ".base files", "Bases", "table view", "card view", or wants to filter or group notes by a frontmatter property or tag. This skill scans the vault for real property usage first and only proposes dashboards backed by properties that actually exist — it never invents properties that are not in the vault.
+description: Use when the user wants a live, database-like dashboard over their Obsidian notes — a Base (.base file) that filters, groups, or tables notes by their properties or tags. Trigger phrases - "create a dashboard", "generate a base", "make a Bases view", "build a table view of my notes", "show all notes with status X", "surface my draft backlog", "notes missing a property". Also trigger when the user mentions ".base files", "Bases", "table view", "card view", or wants to filter or group notes by a frontmatter property or tag. This skill scans the vault for real property usage first and only proposes dashboards backed by properties that actually exist — it never invents properties that are not in the vault.
 ---
 
 # Obsidian Bases Generator

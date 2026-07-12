@@ -82,6 +82,11 @@ def scan(vault, prefixes):
         for fn in files:
             if not fn.endswith(".md"):
                 continue
+            # Protected notes (e.g. _vault-autopilot.md) share the excluded-dir
+            # prefix convention; os.walk only prunes DIRS, so skip files by name
+            # too or a protected marker note inflates the coverage counts.
+            if is_excluded_dir(fn, prefixes):
+                continue
             total_notes += 1
             folder_notes[top] += 1
             path = os.path.join(root, fn)

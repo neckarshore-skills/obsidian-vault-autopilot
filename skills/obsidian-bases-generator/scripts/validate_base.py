@@ -10,14 +10,20 @@ classes a generator actually produces:
      `formulas:`. Obsidian fails this silently (the column just never renders),
      which is worse than a loud error — you think the base works.
 
-Formula references can hide in FOUR places, not just `order`. Checking only
+Formula references can hide in many places, not just `order`. Checking only
 `order` (the naive version) lets a typo'd groupBy or a stale properties key
 sail through validation and break in Obsidian:
 
   - view.order[]                     (columns shown)
   - view.groupBy.property            (grouping key — often a formula)
+  - view.sort[].property             (row ordering — often a formula)
   - view.summaries{} keys            (per-column summary rows)
+  - view.filters + top-level filters (expressions like `formula.hot > 5`)
   - top-level properties{} keys      (display-name overrides)
+
+Filters and sort hold expression STRINGS, so references are extracted with a
+regex (see FORMULA_REF_RE), not a startswith check. Every container is also
+shape-guarded: a malformed .base returns a clean FAIL instead of crashing.
 
 What this does NOT check: the Bases expression language itself (operator
 validity, .days-before-.round, null-guards). Those are format rules verified
@@ -29,6 +35,7 @@ Usage:
 Exit code 0 = all valid, 1 = at least one failure.
 """
 
+import re
 import sys
 
 try:
@@ -36,12 +43,18 @@ try:
 except ImportError:
     sys.exit("PyYAML required: pip install pyyaml")
 
+# A formula reference is the token `formula.<name>` wherever it appears — a bare
+# order entry ("formula.age_days"), a groupBy property, OR embedded inside a
+# filter/sort expression string ("formula.age_days > 5 && formula.hot").
+# A naive startswith+split only handles the bare case and mangles expressions
+# (it would yield "age_days > 5" as a name), so extract the token with a regex.
+FORMULA_REF_RE = re.compile(r"formula\.([A-Za-z_]\w*)")
+
 
 def formula_refs_in(value):
     """Yield every 'formula.X' name reachable inside a value (str/list/dict)."""
     if isinstance(value, str):
-        if value.startswith("formula."):
-            yield value.split(".", 1)[1]
+        yield from FORMULA_REF_RE.findall(value)
     elif isinstance(value, list):
         for item in value:
             yield from formula_refs_in(item)
@@ -63,33 +76,53 @@ def validate_base(path):
     if not isinstance(data, dict):
         return False, "top level is not a YAML mapping"
 
-    defined = set((data.get("formulas") or {}).keys())
+    # Shape-guard every container before we walk it. A malformed .base (e.g.
+    # `formulas: "oops"`) must return a clean FAIL, never crash with
+    # AttributeError — a validator that dies on bad input defeats its own point.
+    formulas = data.get("formulas") or {}
+    if not isinstance(formulas, dict):
+        return False, "'formulas' is not a YAML mapping"
+    defined = set(formulas.keys())
 
+    properties = data.get("properties") or {}
+    if not isinstance(properties, dict):
+        return False, "'properties' is not a YAML mapping"
     # Top-level properties{} keys may be 'formula.X' display-name overrides.
-    for key in (data.get("properties") or {}):
-        if isinstance(key, str) and key.startswith("formula."):
-            name = key.split(".", 1)[1]
-            if name not in defined:
-                return False, f"properties references undefined formula: {key}"
+    for name in formula_refs_in(list(properties.keys())):
+        if name not in defined:
+            return False, f"properties references undefined formula.{name}"
 
-    for i, view in enumerate(data.get("views") or []):
+    # Top-level filters apply to every view and may reference formula.X.
+    for name in formula_refs_in(data.get("filters")):
+        if name not in defined:
+            return False, f"top-level filters references undefined formula.{name}"
+
+    views = data.get("views") or []
+    if not isinstance(views, list):
+        return False, "'views' is not a YAML list"
+    for i, view in enumerate(views):
+        if not isinstance(view, dict):
+            return False, f"view[{i}] is not a YAML mapping"
         where = f"view[{i}] ({view.get('name', 'unnamed')})"
-        # order[] columns
-        for name in formula_refs_in(view.get("order")):
-            if name not in defined:
-                return False, f"{where} order references undefined formula.{name}"
+        # order[] (columns), view-specific filters, and sort[] all take formula.X
+        for kind in ("order", "filters", "sort"):
+            for name in formula_refs_in(view.get(kind)):
+                if name not in defined:
+                    return False, f"{where} {kind} references undefined formula.{name}"
         # groupBy.property
-        gb = (view.get("groupBy") or {}).get("property")
-        if isinstance(gb, str) and gb.startswith("formula."):
-            name = gb.split(".", 1)[1]
+        groupby = view.get("groupBy") or {}
+        if not isinstance(groupby, dict):
+            return False, f"{where} groupBy is not a YAML mapping"
+        for name in formula_refs_in(groupby.get("property")):
             if name not in defined:
                 return False, f"{where} groupBy references undefined formula.{name}"
         # summaries{} keys
-        for key in (view.get("summaries") or {}):
-            if isinstance(key, str) and key.startswith("formula."):
-                name = key.split(".", 1)[1]
-                if name not in defined:
-                    return False, f"{where} summaries references undefined formula.{name}"
+        summaries = view.get("summaries") or {}
+        if not isinstance(summaries, dict):
+            return False, f"{where} summaries is not a YAML mapping"
+        for name in formula_refs_in(list(summaries.keys())):
+            if name not in defined:
+                return False, f"{where} summaries references undefined formula.{name}"
 
     return True, "OK"
 

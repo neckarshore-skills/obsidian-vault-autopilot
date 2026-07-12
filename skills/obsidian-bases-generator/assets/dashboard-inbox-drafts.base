@@ -46,6 +46,9 @@ views:
   - type: table
     name: "Oldest Untouched"
     limit: 20
+    sort:
+      - property: formula.age_days
+        direction: DESC
     order:
       - file.name
       - status
