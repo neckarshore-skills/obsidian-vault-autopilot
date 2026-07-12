@@ -1,0 +1,56 @@
+# Dashboard - Inbox Drafts
+# Surfaces unprocessed notes in the Inbox, grouped by status, oldest first.
+# STARTER TEMPLATE: adapt the inbox folder name and the status values in
+# status_icon to the target vault before shipping. The values below were
+# reconciled against a real vault (status: draft / active / aktiv / referenz /
+# final) - re-run scripts/scan_properties.py if the target vault differs.
+
+filters:
+  and:
+    - file.inFolder("001_Inbox - Temporary holding area for new, unprocessed notes")
+    - 'file.ext == "md"'
+
+formulas:
+  # file.ctime is file metadata (always present) so age_days needs no null-guard.
+  # .days is accessed BEFORE .round - a raw Duration has no .round.
+  age_days: '(now() - file.ctime).days.round(0)'
+  # status is a note property (~46% coverage) so the whole formula is guarded:
+  # a note without status shows an empty icon, never an error.
+  status_icon: 'if(status, if(status == "draft", "✏️", if(status == "active" || status == "aktiv", "🟢", if(status == "referenz", "📗", if(status == "final", "✅", "❓")))), "")'
+
+properties:
+  formula.status_icon:
+    displayName: ""
+  status:
+    displayName: "Status"
+  formula.age_days:
+    displayName: "Age (days)"
+  file.mtime:
+    displayName: "Modified"
+
+views:
+  - type: table
+    name: "By Status"
+    groupBy:
+      property: status
+      direction: ASC
+    order:
+      - formula.status_icon
+      - file.name
+      - status
+      - formula.age_days
+      - file.mtime
+    summaries:
+      formula.age_days: Average
+
+  - type: table
+    name: "Oldest Untouched"
+    limit: 20
+    sort:
+      - property: formula.age_days
+        direction: DESC
+    order:
+      - file.name
+      - status
+      - formula.age_days
+      - file.ctime

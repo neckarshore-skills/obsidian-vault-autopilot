@@ -1,0 +1,59 @@
+# Dashboard - Research Reports
+# Indexes notes carrying the "Research" tag, grouped by category.
+# STARTER TEMPLATE reconciled against a real vault (41 Research notes):
+#   - the category tags are the ones that actually co-occur with #Research:
+#     Trading/Finance dominate, then OpenSource and Software. The assumed
+#     "Protocol" tag did not exist and was dropped.
+#   - file.hasTag() matches nested tags, so hasTag("Software") also catches
+#     #Software/DevTools and #Software/Infrastructure; hasTag("OpenSource")
+#     catches #OpenSource/AI-ML.
+#   - status values seen: draft (dominant) and abandoned (rare) - both real.
+# Re-run scripts/scan_properties.py if the target vault differs.
+
+filters:
+  and:
+    - file.hasTag("Research")
+    - 'file.ext == "md"'
+
+formulas:
+  # file.hasTag is a file method (always safe), so category needs no null-guard.
+  category: 'if(file.hasTag("Trading") || file.hasTag("Finance"), "Finance & Trading", if(file.hasTag("OpenSource"), "OpenSource", if(file.hasTag("Software"), "Software", "Other")))'
+  age_days: '(now() - file.ctime).days.round(0)'
+  # status is a note property, so the whole formula is null-guarded.
+  status_icon: 'if(status, if(status == "draft", "✏️", if(status == "abandoned", "💀", "✅")), "")'
+
+properties:
+  formula.status_icon:
+    displayName: ""
+  formula.category:
+    displayName: "Category"
+  formula.age_days:
+    displayName: "Age (days)"
+  source:
+    displayName: "Source"
+
+views:
+  - type: table
+    name: "By Category"
+    groupBy:
+      property: formula.category
+      direction: ASC
+    order:
+      - formula.status_icon
+      - file.name
+      - formula.category
+      - status
+      - formula.age_days
+    summaries:
+      file.name: Filled
+
+  - type: cards
+    name: "Recent Reports"
+    limit: 12
+    filters:
+      not:
+        - 'status == "abandoned"'
+    order:
+      - file.name
+      - formula.category
+      - source

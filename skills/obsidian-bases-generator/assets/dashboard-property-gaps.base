@@ -1,0 +1,73 @@
+# Dashboard - Property Gaps
+# Surfaces notes the property skills still need to fix, to drive the Autopilot
+# backlog. STARTER TEMPLATE reconciled against a real vault:
+#   - the real gap on `type` is MISSING (~60% of notes have no type); there is
+#     no `type: TBD` sentinel, so the filter leads with `!type`.
+#   - the `TBD` sentinel is real on `description` (empty or literal "TBD").
+# Re-run scripts/scan_properties.py if the target vault differs.
+
+filters:
+  and:
+    - 'file.ext == "md"'
+    - not:
+        - file.inFolder("099_Archive - Completed, inactive, or historical material")
+
+formulas:
+  # These are gap detectors: they are SUPPOSED to fire when the property is
+  # absent, so the missing-value case (!type / !description) IS the guard.
+  needs_type: 'if(!type || type == "TBD", "⚠️ type", "")'
+  needs_desc: 'if(!description || description == "TBD" || description == "", "⚠️ description", "")'
+  gap_count: 'if(!type || type == "TBD", 1, 0) + if(!description || description == "TBD" || description == "", 1, 0)'
+
+properties:
+  formula.needs_type:
+    displayName: "Type Gap"
+  formula.needs_desc:
+    displayName: "Description Gap"
+  formula.gap_count:
+    displayName: "Gaps"
+
+views:
+  - type: table
+    name: "Missing Type"
+    filters:
+      or:
+        - '!type'
+        - 'type == "TBD"'
+    order:
+      - file.name
+      - type
+      - file.folder
+      - file.mtime
+    summaries:
+      file.name: Filled
+
+  - type: table
+    name: "Missing or TBD Description"
+    filters:
+      or:
+        - '!description'
+        - 'description == "TBD"'
+        - 'description == ""'
+    order:
+      - file.name
+      - type
+      - file.folder
+
+  - type: table
+    name: "All Gaps Ranked"
+    filters:
+      or:
+        - '!type'
+        - 'type == "TBD"'
+        - '!description'
+        - 'description == "TBD"'
+        - 'description == ""'
+    groupBy:
+      property: formula.gap_count
+      direction: DESC
+    order:
+      - file.name
+      - formula.needs_type
+      - formula.needs_desc
+      - formula.gap_count
