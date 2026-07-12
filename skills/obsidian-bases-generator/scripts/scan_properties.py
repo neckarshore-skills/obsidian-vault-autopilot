@@ -18,9 +18,10 @@ reports three things a Base filter can actually reference:
      file.inFolder("...") needs the real folder name, verbatim.
 
 House scan rules (references/vault-autopilot-note.md, config-spec.md):
-folders whose name starts with an excluded prefix (default "_" and ".") are
-skipped wholesale — this covers _vault-autopilot/, _trash/, _secret/,
-.obsidian/, .trash/. Pass --exclude-prefix to override.
+folders AND files whose name starts with an excluded prefix (default "_" and
+".") are skipped wholesale — this covers _vault-autopilot/, _trash/, _secret/,
+.obsidian/, .trash/ as well as protected marker notes like _vault-autopilot.md.
+Pass --exclude-prefix to override.
 
 Usage:
     python scan_properties.py [VAULT_PATH] [--json OUT.json] [--exclude-prefix _ .]
