@@ -241,11 +241,19 @@ verify them rather than assuming:
    any nested tags." So a category formula can key on the parent tag and catch
    every child. Signature: `file.hasTag(...values: string): boolean` (matches if
    the note has any of the given tags).
-2. **`file.inFolder()` includes sub-folders.** `file.inFolder("001_Inbox")`
-   returns true for a note "in the specified folder or one of its sub-folders."
-   It matches by folder name, and the name must be the real one — if the folder
-   is `099_Archive - Completed…`, then `inFolder("099_Archive")` does NOT match.
-   Use the exact folder name from the scan.
+2. **`file.inFolder()` includes sub-folders — but match a top-level folder by its
+   full path, not a nested folder by its leaf name.** It returns true for a note
+   "in the specified folder or one of its sub-folders." Two verified gotchas:
+   (a) the name must be the real one — if the folder is `099_Archive - Completed…`,
+   then `inFolder("099_Archive")` does NOT match; use the exact name from the scan.
+   (b) **A deeply-nested folder referenced by its leaf name renders EMPTY.**
+   `inFolder("Skill Library")` for a folder actually at
+   `020_Processes …/Library Meta/Skill Library` matched zero notes in testing —
+   the whole view came back blank. Two fixes: pass the full path from the vault
+   root, or (cleaner when a collection maps to a property) filter by that property
+   instead, e.g. `type == "skill"`. This was found the hard way: a base filtered
+   `inFolder("<nested leaf>") AND type == "skill"` was empty, while the same base
+   with `type == "skill"` alone rendered all rows.
 3. **`groupBy` on a formula is undocumented — flag it.** `order`, `properties`,
    and `summaries` accept `formula.X` (documented). The official docs do not
    document `groupBy: {property: formula.X}`, though kepano-style bases use it

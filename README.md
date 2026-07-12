@@ -19,7 +19,7 @@ in full before processing sensitive content.
 
 ## What This Does
 
-**Nine skills** manage your vault automatically — four launch-scope skills validated to Gold-Run coverage, plus five more shipped in beta and usable today.
+**Ten skills** manage your vault automatically — four launch-scope skills validated to Gold-Run coverage, plus six more shipped in beta and usable today.
 
 > **New in v0.3.0:** full tag management has landed. `tag-manage` (audit + convention cleanup) and `tag-organize` (nested tag hierarchy) are shipped and usable today — see the beta skills below.
 
@@ -36,7 +36,7 @@ The **🧪 beta** skill is usable today with caveats — behavior may still chan
 
 ### Also available — beta (shipped & usable today)
 
-Five more skills ship in the codebase and run today. They have not yet been validated at the same Gold-Run coverage as the launch-scope skills, so behavior may still change before v1.0 — but they are real, installed, and usable now.
+Six more skills ship in the codebase and run today. They have not yet been validated at the same Gold-Run coverage as the launch-scope skills, so behavior may still change before v1.0 — but they are real, installed, and usable now.
 
 | # | Skill | What it does | Status |
 |---|-------|-------------|--------|
@@ -45,6 +45,7 @@ Five more skills ship in the codebase and run today. They have not yet been vali
 | 3 | ai-paste-cleanup | Cleans AI-generated / pasted Markdown — strips citation markers, zero-width and non-breaking characters, bold/italic-wrapped headings, and blank-line runs; dry-run diff + a survival guard that protects links, checkboxes, and emoji | 🧪 beta |
 | 4 | note-quality-check | Scores notes by quality, recommends what to keep or delete | 🧪 beta |
 | 5 | property-classify | Sets lifecycle `status` and `type` properties automatically | 🧪 beta |
+| 6 | obsidian-bases-generator | Generates live `.base` dashboards from the properties that already exist in your vault — scans real property coverage first, then writes validated Bases you can open in Obsidian; never invents a property | 🧪 beta |
 
 > **Tag hierarchy:** `tag-manage` can also nest flat tags under a parent you declare (`#daytrading` → `#Investing/DayTrading`). See the [Tag Hierarchy guide](docs/tag-hierarchy.md).
 
