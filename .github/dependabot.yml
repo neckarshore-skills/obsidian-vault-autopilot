@@ -13,6 +13,23 @@ updates:
     schedule:
       interval: "weekly"
     groups:
+      # CodeQL's init and analyze are the SAME action at the same SHA and must move
+      # together. Grouping them across ALL update-types (majors included) is the point:
+      # ungrouped, a major arrives as two PRs that each break the pair, and neither can
+      # ever pass. Review is NOT weakened — the combined PR is still a major, and the
+      # adopted policy holds ALL github-actions majors to manual review (major -> manual
+      # wins universally, no per-action name list). A human still merges it.
+      #
+      # Declared BEFORE github-actions-minor-patch: the "*" pattern below would otherwise
+      # swallow the codeql entries if Dependabot applies first-match-wins on overlap.
+      codeql-action:
+        patterns:
+          - "github/codeql-action*"
+        update-types:
+          - "major"
+          - "minor"
+          - "patch"
+
       github-actions-minor-patch:
         patterns:
           - "*"
