@@ -1,7 +1,8 @@
 name: Dependabot auto-merge
 
 # Auto-merges the SAFE class of Dependabot PRs once the repo's required checks pass.
-# Policy: neckarshore-planning/docs/specs/dependabot-auto-merge-policy.md (ADOPTED 2026-07-10).
+# Policy: neckarshore-planning/docs/reference/dependabot-auto-merge-policy.md (ADOPTED 2026-07-10).
+# (Repointed 2026-07-20: docs/specs/ was dissolved by AD-43; the old path is dead.)
 #
 # `on: pull_request` (NOT pull_request_target) — GitHub's official auto-merge pattern.
 # For first-party Dependabot PRs the elevated `permissions:` block grants the built-in
