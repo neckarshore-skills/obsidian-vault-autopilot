@@ -123,7 +123,7 @@ jobs:
 
       # SHA-pinned (third-party actions are never tag-floated). 54ae407 is the PIR-passed pin.
       - name: Emit stats.json
-        uses: neckarshore-ai/test-stats-action@54ae407769bdfea6b8fed2672f0ceefa5ef2588a
+        uses: neckarshore-ai/test-stats-action@eff3ddbc9e7d9b68db38f451d0395681ff8df592
         with:
           repo: ${{ github.repository }}
           out: stats.json
