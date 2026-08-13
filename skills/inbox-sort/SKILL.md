@@ -90,7 +90,7 @@ Never move, rename, or process these files (see `references/vault-autopilot-note
 ## Boundaries
 
 - No renaming files
-- No deep analysis, no creating subfolders, no editing content
+- No deep analysis, no creating subfolders, no rewriting note body content — the mandated `Vault Autopilot` skill-log callout (`references/skill-log.md`) is the one appended exception
 - No processing files already in subfolders
 
 ## Report Format

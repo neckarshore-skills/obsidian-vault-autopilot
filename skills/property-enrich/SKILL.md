@@ -110,7 +110,7 @@ Run the checks freshly each time. Do not assume a previous turn's pass result st
 
 - Additive only (except `modified`)
 - Does not write `description` (property-describe), `status` or `type` (property-classify)
-- Does not modify note body, delete, move, or rename files
+- Does not rewrite note body content — the mandated `Vault Autopilot` skill-log callout (`references/skill-log.md`) is the one appended exception. Does not delete, move, or rename files
 - Does not fill `aliases`, `parent`, `source`, `priority` in v0.1.0
 
 ## Report Format

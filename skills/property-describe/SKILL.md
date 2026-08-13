@@ -96,7 +96,7 @@ Run the checks freshly each time. Do not assume a previous turn's pass result st
 ## Boundaries
 
 - ONLY writes `description` — no other property modified
-- Does not touch note body content
+- Does not rewrite note body content — the mandated `Vault Autopilot` skill-log callout (`references/skill-log.md`) is the one appended exception
 - Does not create, delete, move, or rename files
 
 ## Report Format
