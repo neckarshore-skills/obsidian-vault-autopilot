@@ -2,6 +2,8 @@
 
 Every skill that modifies a note must leave a trace: a tag in frontmatter and a row in the skill log callout.
 
+> **Important:** The callout is appended to the **note body**, not to frontmatter. It is the one body write every note-modifying skill performs, and it is sanctioned by this contract. A skill's Boundaries section must therefore never claim it leaves the body untouched — the correct claim is that it does not *rewrite* body content, with this callout named as the appended exception. A boundary that denies the callout puts the executing model in front of a silent choice between two authoritative instructions.
+
 ## Tag
 
 Add `VaultAutopilot` to the `tags` list in YAML frontmatter if not already present. This marks the note as "touched by automation" and makes it searchable.
