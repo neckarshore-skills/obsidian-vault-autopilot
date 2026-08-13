@@ -6,7 +6,7 @@ description: Use when Obsidian vault notes have incomplete or missing YAML front
 
 # Property Enrich
 
-Fill missing structural metadata: `title`, `created`, `modified`. Additive only — never overwrites (except `modified`).
+Fill missing structural metadata: `title`, `created`, `modified`. Additive only — never overwrites existing values, except `modified`, the sanctioned YAML-sanity repairs, the canonical reorder, and the mandated `VaultAutopilot` tag (`references/skill-log.md`). See Boundaries for the full list.
 
 ## When to Run This
 
@@ -108,7 +108,7 @@ Run the checks freshly each time. Do not assume a previous turn's pass result st
 
 ## Boundaries
 
-- Additive only (except `modified`)
+- Additive only, with three sanctioned exceptions: `modified`, the YAML-sanity repairs of Step 2a (`references/yaml-edits.md` recipe f), and the canonical property reorder of Step 6a (recipe g). Both of the latter rewrite existing frontmatter and are required by the workflow — see also the mandated `VaultAutopilot` tag (`references/skill-log.md`)
 - Does not write `description` (property-describe), `status` or `type` (property-classify)
 - Does not rewrite note body content — the mandated `Vault Autopilot` skill-log callout (`references/skill-log.md`) is the one appended exception. Does not delete, move, or rename files
 - Does not fill `aliases`, `parent`, `source`, `priority` in v0.1.0

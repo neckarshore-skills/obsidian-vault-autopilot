@@ -98,7 +98,7 @@ Run the checks freshly each time. Do not assume a previous turn's pass result st
 
 ## Boundaries
 
-- ONLY writes `status` and `type` (plus the casing Nahbereich on those two keys) — no other property modified
+- ONLY writes `status` and `type` (plus the casing Nahbereich on those two keys) — no other property modified, except the mandated `VaultAutopilot` tag (`references/skill-log.md`)
 - Does not write `created` — cooldown derivation is read-only (property-enrich owns `created`)
 - Does not repair broken YAML — defers to property-enrich / note-rename per Step 2a
 - Does not rewrite note body content — the mandated `Vault Autopilot` skill-log callout (`references/skill-log.md`) is the one appended exception. Does not create, delete, move, or rename files
