@@ -1,6 +1,6 @@
 {
   "repo": "neckarshore-skills/obsidian-vault-autopilot",
-  "audited_sha": "f3e0c199c06c4852dc62247e5ad741341184a611",
+  "audited_sha": "17cbba30a9ba582354572669bd35a64145b72eaf",
   "red": false,
   "red_detail": null,
   "tests": {
@@ -11,5 +11,5 @@
     "declared": {},
     "lenses": {}
   },
-  "updatedAt": "2026-07-30T17:12:15Z"
+  "updatedAt": "2026-08-21T08:28:27Z"
 }
