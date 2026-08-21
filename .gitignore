@@ -51,3 +51,10 @@ tests/fixtures/clone-cluster/notes/
 # patterns above (a *-draft.md fixture was silently excluded on 2026-06-11).
 !tests/fixtures/**/*.md
 !.claude/settings.json
+
+# SDD build ledgers - local build material, never shipped and never cited as
+# evidence a PR reviewer can open (#1779, ruling: way 2 - the verification chain
+# is summarised in the PR body instead). The directory currently self-ignores via
+# a nested .superpowers/sdd/.gitignore written by the tool; this line makes the
+# intent the repo's own and survives that file going away.
+.superpowers/
