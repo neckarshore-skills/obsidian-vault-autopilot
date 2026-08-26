@@ -71,9 +71,16 @@ function readLibrary(libraryDir, options = {}) {
   return notes.sort((a, b) => a.title.localeCompare(b.title));
 }
 
-// Describes one conflict on a single line, for the preview -- this is the
-// one channel built to surface ambiguous data, so a preview that hides it
-// would be invisible at the exact moment a human decides whether to write.
+// Describes one conflict on a single line, for the preview and for the
+// findings ledger -- this is the one channel built to surface ambiguous
+// data, so hiding it in either place would be invisible at the exact
+// moment a human decides whether to write, or reads what already ran.
+//
+// The `detail` shape VARIES between conflict kinds -- one producer's
+// `detail.from` is another's `detail.path`, and some kinds have no detail
+// at all -- so the fallback picks the first locator field actually present
+// rather than assuming one exists, and never lets a missing field print
+// the literal string "undefined".
 function describeConflict(c) {
   if (c.kind === 'duplicate-note-title') {
     return `duplicate-note-title: ${c.detail.title} (${c.detail.notes.length} notes)`;
@@ -82,7 +89,9 @@ function describeConflict(c) {
     const orts = c.detail.entries.map((e) => e.ort).join(', ');
     return `duplicate-inventory-entry: ${c.detail.name} (${c.detail.herkunft}) at ${orts}`;
   }
-  return `${c.kind}: ${JSON.stringify(c.detail)}`;
+  const detail = c.detail || {};
+  const locator = detail.path || detail.from || detail.to || detail.title || null;
+  return locator ? `${c.kind}: ${locator}` : c.kind;
 }
 
 function renderPreview(result) {
@@ -382,11 +391,49 @@ function rebuildIndex(libraryDir, options = {}) {
   return full;
 }
 
-// Forward reference to Task 9 (the findings ledger). Same situation as
-// rebuildIndex above: the call is specified here, Task 9 supplies the real
-// behaviour. This stub is a deliberate no-op, not a silent drop of the call.
+// The ledger is Storage: a documented machine schema, deliberately exempt
+// from the title/description/tags standard OVA enforces on the user's own
+// notes. Append-only -- a second run on the same day adds a block, it never
+// replaces the morning's record.
+//
+// RULING (overrides the plan's original four-count spec): the ledger also
+// carries conflicts -- a `conflicts:` count beside the other four counts,
+// and one line per conflict below it. Task 7 built the conflicts channel
+// specifically so a note the run refused to touch is NAMED rather than
+// silently skipped; a ledger that reports four counts and stays silent
+// about the fifth would tell the reader a clean run happened when notes
+// were left behind.
 function writeFindings(vault, result, options = {}) {
-  return null;
+  const now = options.now || new Date();
+  const day = stamp(now);
+  const dir = path.join(vault, '_vault-autopilot', 'findings');
+  fs.mkdirSync(dir, { recursive: true });
+  const target = path.join(dir, `${day}-skill-library-sync.md`);
+
+  const conflicts = result.conflicts || [];
+
+  const block = [
+    '',
+    `## Run ${nowStamp(now)}`,
+    '',
+    'counts:',
+    `  created: ${result.written.length}`,
+    `  retired: ${result.moved.length}`,
+    `  renamed: ${result.renamed.length}`,
+    `  unchanged: ${result.unchanged}`,
+    `  conflicts: ${conflicts.length}`,
+    ...conflicts.map((c) => `  - ${describeConflict(c)}`),
+    '',
+  ].join('\n');
+
+  let existing = '';
+  try { existing = fs.readFileSync(target, 'utf8'); } catch { /* first run today */ }
+  const header = existing || [
+    '---', `date: ${day}`, 'skill: skill-library-sync',
+    'scope: skill-library', '---', '',
+  ].join('\n');
+  fs.writeFileSync(target, `${header}${block}`);
+  return target;
 }
 
 function applyPlan(vault, options = {}) {
