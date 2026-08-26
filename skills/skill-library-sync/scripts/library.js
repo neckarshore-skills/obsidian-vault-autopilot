@@ -12,7 +12,14 @@ const NOTES_HEADING = '## Notizen';
 const STUB = '(noch keine vertiefende Dokumentation — Stub aus der Bestandsaufnahme 2026-07-05)';
 
 function parseNote(text) {
-  const src = String(text);
+  // Normalise line endings for parsing purposes only. A note authored with
+  // CRLF (Windows) line endings must still yield its frontmatter -- the
+  // regexes below assume '\n', and without this normalisation a CRLF file
+  // parses as having NO frontmatter, which downstream reads as a missing
+  // `ort` and marks the note for rewrite on every single run, forever.
+  // This never touches the caller's file, and beyond making the split
+  // itself work it does not change what notesZone contains.
+  const src = String(text).replace(/\r\n/g, '\n');
   const fmMatch = src.match(/^---\n([\s\S]*?)\n---\n?/);
   const frontmatter = {};
   let rest = src;

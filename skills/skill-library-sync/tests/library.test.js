@@ -63,3 +63,15 @@ test('an unquoted value keeps its backslashes verbatim', () => {
   const parsed = parseNote(text);
   assert.strictEqual(parsed.frontmatter.raw, 'C:\\Users\\x\\file');
 });
+
+// RULING 2: a note authored with Windows line endings must still parse its
+// frontmatter -- the Unix-only regex silently returns NO frontmatter for a
+// CRLF file, which downstream reads as a missing `ort` and classifies the
+// note for rewrite on every single run, forever.
+test('a CRLF-authored note yields its frontmatter', () => {
+  const text = NOTE.replace(/\n/g, '\r\n');
+  const parsed = parseNote(text);
+  assert.strictEqual(parsed.frontmatter.title, 'note-rename');
+  assert.strictEqual(parsed.frontmatter.herkunft, 'eigen');
+  assert.strictEqual(parsed.hasNotesHeading, true);
+});
