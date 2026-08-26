@@ -17,8 +17,14 @@ write only after the user confirms.
 ## Principle - Core + Nahbereich + Report
 
 - **Core:** reconcile the library against the inventory.
-- **Nahbereich:** dead wikilinks in the index and a stale count in its prose are
-  fixed in passing. Nothing else. This skill does not write skill documentation.
+- **Nahbereich:** the index note's generated section - everything from its first
+  `## ` heading down - is rebuilt from the library on every `--write` run, so
+  dead wikilinks in its table disappear on their own. Its frontmatter, its H1
+  and any intro prose above that first heading belong to the user and are
+  carried through verbatim, a stale count in them included. Do not hand-edit
+  that zone to correct such a count - it is the one part of the index the code
+  deliberately protects. Nothing else. This skill does not write skill
+  documentation.
 - **Report:** counts per bucket including the zeros, every rename by name, plus a
   findings entry.
 

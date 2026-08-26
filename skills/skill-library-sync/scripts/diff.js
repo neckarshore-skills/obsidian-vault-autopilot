@@ -172,11 +172,15 @@ function diffLibrary(inventory, notes) {
     if (!note && renameClaimByEntry.has(entry)) {
       const bare = renameClaimByEntry.get(entry);
       if (!claimed.has(bare)) {
-        // `note` carries the object through for consumers that act on the
-        // rename (the write path): a second string-keyed lookup by title
-        // is exactly the pattern that already produced a Critical earlier
-        // in this plan, and it is needless when the object is right here.
-        renamed.push({ from: bare.title, to: noteTitle(entry), note: bare });
+        // `note` and `entry` both ride on the record for consumers that act
+        // on the rename (the write path): a second string-keyed lookup by
+        // title is exactly the pattern that already produced a Critical
+        // earlier in this plan, and it is needless when both objects are
+        // right here. The entry ALSO stays in whichever bucket it lands in
+        // below -- that double membership is what the write path used to
+        // depend on, and removing it is not the fix for the double COUNT
+        // (cli.js's unclaimedByRename projects the buckets for reporting).
+        renamed.push({ from: bare.title, to: noteTitle(entry), note: bare, entry });
         claimed.add(bare);
         note = bare;
       }

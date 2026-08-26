@@ -7,7 +7,11 @@
 //   apply <vault> --write [--max n] [--retire-max n]   apply behind the two caps
 //
 // Plan-then-write: every note is rendered in memory and every guard throws
-// BEFORE the first write, so a refusal leaves the library untouched.
+// BEFORE the first write, so a refusal leaves the library untouched. The one
+// check that cannot run before the writes is the index rebuild's zero-row
+// refusal -- it compares the rebuilt row count against the file, and the
+// rebuilt count is a fact about the library AFTER the writes. It is typed and
+// mapped like the other guards; see rebuildIndex.
 
 const fs = require('node:fs');
 const os = require('node:os');
@@ -64,6 +68,8 @@ function readLibrary(libraryDir, options = {}) {
       notes.push({
         title, name: m[1], suffix: m[2] || '', file: p,
         frontmatter: parsed.frontmatter, notesZone: parsed.notesZone,
+        machineBody: parsed.machineBody,
+        hasFrontmatter: parsed.hasFrontmatter, hasNotesHeading: parsed.hasNotesHeading,
         replaceable: isReplaceableZone(parsed.notesZone),
       });
     }
@@ -105,12 +111,19 @@ function describeConflict(c) {
 }
 
 function renderPreview(result) {
+  // A note claimed by a rename is reported ONCE, as a rename -- it used to be
+  // announced as `renamed: 1` and `unchanged: 1` (or `relocated: 1`) for the
+  // same file, which `apply --write` then contradicted by reporting it only
+  // once. The rename is the truthful label: that branch does the move and the
+  // full rewrite.
+  const relocated = unclaimedByRename(result.relocated, result.renamed);
+  const unchanged = unclaimedByRename(result.unchanged, result.renamed);
   const lines = [
     `created:   ${result.created.length}`,
-    `relocated: ${result.relocated.length}`,
+    `relocated: ${relocated.length}`,
     `retired:   ${result.retired.length}`,
     `renamed:   ${result.renamed.length}`,
-    `unchanged: ${result.unchanged.length}`,
+    `unchanged: ${unchanged.length}`,
     `conflicts: ${result.conflicts.length}`,
   ];
   for (const r of result.renamed) lines.push(`  rename: ${r.from} -> ${r.to}`);
@@ -119,7 +132,7 @@ function renderPreview(result) {
   // note that would change" -- relocated was counted but never named, so a
   // confirm gate covering ~40 unnamed relocations at real scale was strictly
   // less informative than the other four buckets it sits beside.
-  for (const r of result.relocated) lines.push(`  relocate: ${r.note.title} -> ${r.ort}`);
+  for (const r of relocated) lines.push(`  relocate: ${r.note.title} -> ${r.ort}`);
   for (const r of result.retired) lines.push(`  retire: ${r.title}`);
   for (const c of result.conflicts) lines.push(`  conflict: ${describeConflict(c)}`);
   return lines.join('\n');
@@ -243,7 +256,9 @@ function main(argv) {
         return 1;
       }
       if (err instanceof LibraryPathNotConfiguredError
-        || err instanceof LibraryDirectoryMissingError) {
+        || err instanceof LibraryDirectoryMissingError
+        || err instanceof IndexMalformedError
+        || err instanceof IndexRowLossError) {
         process.stderr.write(`${err.message}\n`);
         return 2;
       }
@@ -302,6 +317,26 @@ class LibraryPathNotConfiguredError extends Error {
       + 'or missing). Without it the scan target defaults to the vault root. '
       + 'Configure library_path before running apply --write.');
     this.name = 'LibraryPathNotConfiguredError';
+  }
+}
+
+// Both index refusals used to throw a bare Error. main() maps its typed
+// error classes to exit codes and rethrows everything else, so a malformed index
+// surfaced as a raw stack trace under node's default exit code -- a refusal
+// the operator could not tell apart from a crash. Both are guard errors (the
+// index the run was pointed at is not one it can safely regenerate), so both
+// map to exit 2.
+class IndexMalformedError extends Error {
+  constructor(indexPath) {
+    super(`index note at ${indexPath} has no H1 heading (expected a line matching /^# .+$/m) -- refusing to guess a replacement rather than silently discarding its frontmatter`);
+    this.name = 'IndexMalformedError';
+  }
+}
+
+class IndexRowLossError extends Error {
+  constructor(existingRowCount) {
+    super(`rebuildIndex would write 0 rows over an index holding ${existingRowCount} -- refusing`);
+    this.name = 'IndexRowLossError';
   }
 }
 
@@ -394,6 +429,12 @@ function targetOccupied(target, allowedFrom) {
   return true;
 }
 
+// These two regexes must accept exactly what parseNote accepts
+// (`^key: *(.*)$` -- the space after the colon is optional), or the two
+// disagree about the same file.
+const STATUS_LINE_RE = /^status:.*$/m;
+const LAST_MODIFIED_LINE_RE = /^last_modified:.*$/m;
+
 // M1 + M2: the retire path used to regex-edit the WHOLE raw file, which is
 // the one code path that did not respect the body boundary library.js
 // exists to enforce -- a user whose own prose happened to contain a line
@@ -418,13 +459,55 @@ function retireBody(raw, now) {
     + (parsed.hasNotesHeading ? NOTES_HEADING.length + parsed.notesZone.length : 0);
   const frontmatterText = raw.slice(0, raw.length - restLength);
   const rest = raw.slice(raw.length - restLength);
-  if (!/^status: .*$/m.test(frontmatterText)) return { ok: false, missing: 'status' };
-  if (!/^last_modified: .*$/m.test(frontmatterText)) return { ok: false, missing: 'last_modified' };
+  // parseNote and these checks disagreed -- `status:aktiv` parsed
+  // fine and was still reported as missing `status`, a true refusal with a
+  // false reason. The REPLACE calls below reuse the SAME two patterns: a
+  // check that matches while its replacement does not would silently no-op
+  // the entfallen_am insert, which is the identical defect one layer down.
+  if (!STATUS_LINE_RE.test(frontmatterText)) return { ok: false, missing: 'status' };
+  if (!LAST_MODIFIED_LINE_RE.test(frontmatterText)) return { ok: false, missing: 'last_modified' };
   const eol = raw.includes('\r\n') ? '\r\n' : '\n';
   const newFrontmatter = frontmatterText
-    .replace(/^status: .*$/m, 'status: entfallen')
-    .replace(/^(last_modified: .*)$/m, `$1${eol}entfallen_am: ${stamp(now)}`);
+    .replace(STATUS_LINE_RE, 'status: entfallen')
+    .replace(LAST_MODIFIED_LINE_RE, `$&${eol}entfallen_am: ${stamp(now)}`);
   return { ok: true, body: newFrontmatter + rest };
+}
+
+// A relocate and a rename both REPLACE everything above `## Notizen` with a
+// freshly rendered template. That is only ours to replace when the note
+// carries the contract that says so: a frontmatter block, and the heading
+// that marks where the machine's half ends and the user's begins. A
+// hand-authored note that merely happens to match the filename pattern never
+// opted in -- rendering over it replaces the user's prose with a stub, exit 0,
+// conflicts 0. Measured against a throwaway vault before this guard existed.
+//
+// Same ruling the retire path already carries one function up (a note you
+// cannot stamp is a note you do not move) and the index rebuild carries below
+// (refuse what you do not understand), in the same `unstampable-note` shape.
+// The one exception is a note with nothing below its frontmatter: there is no
+// user half yet, so there is nothing to lose.
+function rewritableNote(note) {
+  const nothingBelowFrontmatter = !note.hasNotesHeading && note.machineBody.trim() === '';
+  if (!note.hasFrontmatter) {
+    return nothingBelowFrontmatter && note.notesZone.trim() === ''
+      ? { ok: true }
+      : { ok: false, missing: 'frontmatter' };
+  }
+  if (!note.hasNotesHeading && !nothingBelowFrontmatter) {
+    return { ok: false, missing: 'notes-heading' };
+  }
+  return { ok: true };
+}
+
+// A rename-claimed note is deliberately reachable from BOTH its rename record
+// and the unchanged/relocated bucket its entry landed in: the write path needs
+// the entry, the classifier needs the note. Reporting it twice is the defect --
+// the same note was announced as `renamed: 1` AND `unchanged: 1`, and then
+// moved and fully rewritten with a bumped last_modified. Project the bucket
+// for reporting; never remove the entry, which the rename write path reads.
+function unclaimedByRename(bucket, renamed) {
+  const claimed = new Set(renamed.map((r) => r.note));
+  return bucket.filter((b) => !claimed.has(b.note));
 }
 
 const INDEX_FILE_NAME = '_Skill Library.md';
@@ -474,7 +557,7 @@ function readIndexParts(indexPath) {
   }
   const h1 = H1_RE.exec(text);
   if (!h1) {
-    throw new Error(`index note at ${indexPath} has no H1 heading (expected a line matching /^# .+$/m) -- refusing to guess a replacement rather than silently discarding its frontmatter`);
+    throw new IndexMalformedError(indexPath);
   }
   const header = text.slice(0, h1.index + h1[0].length);
   const rest = text.slice(h1.index + h1[0].length);
@@ -509,9 +592,12 @@ function rebuildIndex(libraryDir, options = {}) {
     };
   });
   const indexPath = path.join(libraryDir, INDEX_FILE_NAME);
-  const { header, intro, existingRowCount } = readIndexParts(indexPath);
+  // `options.parts` lets the caller do this pure read BEFORE its own writes,
+  // so the malformed-index refusal lands while the library is still untouched
+  // (see applyPlan). Reading here is the fallback for a direct call.
+  const { header, intro, existingRowCount } = options.parts || readIndexParts(indexPath);
   if (rows.length === 0 && existingRowCount > 0) {
-    throw new Error(`rebuildIndex would write 0 rows over an index holding ${existingRowCount} -- refusing`);
+    throw new IndexRowLossError(existingRowCount);
   }
   const body = renderIndex(rows);
   const full = `${header}${intro}${body}\n`;
@@ -583,7 +669,11 @@ function writeFindings(vault, result, options = {}) {
 function applyPlan(vault, options = {}) {
   const write = Boolean(options.write);
   const now = options.now || new Date();
-  const max = options.max || DEFAULT_MAX;
+  // `--max 0` is the natural spelling of "refuse if anything would change" --
+  // a dry-run idiom. `||` turned it into the 200-note default, i.e. the exact
+  // opposite of what the flag was asked for. Same `!= null` test the retire
+  // cap already used.
+  const max = options.max != null ? options.max : DEFAULT_MAX;
   // ONE collect call. Two would re-scan every plugin directory on disk for a
   // single value, and on a live-edited vault the second call's notes could differ
   // from the first -- an inconsistency, not merely waste.
@@ -630,6 +720,18 @@ function applyPlan(vault, options = {}) {
     : Math.max(10, notes.length * 0.25));
   if (plan.retired.length > retireCap) throw new RetireCapError(plan.retired.length, retireCap, notes.length);
 
+  // readIndexParts is a pure read, and this module's contract is that a
+  // guard throws BEFORE the first write. It used to run inside rebuildIndex,
+  // called after the renames/creates/moves had already hit disk: a malformed
+  // index left a half-synced library with no index and no ledger. Hoisted
+  // here, with the other pre-write guards and after the caps (so a cap
+  // refusal still wins with its exit 1). Preview mode does not run it --
+  // preview writes nothing, and making `apply` without --write exit 2 on a
+  // malformed index would change the confirm gate's contract. The
+  // `existingRowCount` taken here is also the honest baseline for the
+  // zero-row comparison: it is what the file held before this run began.
+  const indexParts = write ? readIndexParts(path.join(libraryDir, INDEX_FILE_NAME)) : null;
+
   // CRITICAL 2, belt: any title already named by diffLibrary's own conflict
   // channel is untouchable here too, not just excluded from the buckets.
   const conflictedTitles = conflictedTitleSet(plan.conflicts);
@@ -666,13 +768,23 @@ function applyPlan(vault, options = {}) {
     // Writing it here too would recreate the old path after the rename moved it,
     // leaving two notes for one skill -- and the stale one holds the user's prose.
     if (renamedFrom.has(note.title)) continue;
+    // A note this run does not understand is a note this run does not rewrite.
+    const rewritable = rewritableNote(note);
+    if (!rewritable.ok) {
+      conflicts.push({ kind: 'unstampable-note', detail: { path: note.file, missing: rewritable.missing } });
+      continue;
+    }
     writes.push({
       kind: 'relocate',
       file: note.file,
       body: renderNote({
         ...entry,
         status: note.frontmatter.status || 'aktiv',
-        created: note.frontmatter.created,
+        // A note whose frontmatter carries no `created` gets a fresh stamp --
+        // this is today's date, NOT a recovered creation date, and it is the
+        // honest value available. Without the default this rendered the
+        // literal string `undefined` into the user's YAML.
+        created: note.frontmatter.created || nowStamp(now),
         lastModified: nowStamp(now),
       }, note.replaceable ? '' : note.notesZone),
     });
@@ -687,7 +799,12 @@ function applyPlan(vault, options = {}) {
     // re-find it by title string in `notes` (that string-keyed-lookup
     // pattern is exactly what produced a Critical earlier in this plan).
     const note = r.note;
-    const entry = plan.relocated.concat(plan.unchanged).find((e) => noteTitle(e) === r.to);
+    // The entry rides on the rename record too, so this no longer
+    // re-derives it by rebuilding and matching a title string across two
+    // buckets -- that string-keyed lookup is the pattern that produced a
+    // Critical earlier in this plan, and it was also what forced the entry to
+    // stay visible in `unchanged` for the write path to find it.
+    const entry = r.entry;
     // A rename is driven by the entry acquiring a suffix (a name gaining a
     // second origin), so its destination folder is the entry's OWN herkunft
     // folder -- the same mapping `created` uses -- not wherever the bare
@@ -706,12 +823,23 @@ function applyPlan(vault, options = {}) {
       conflicts.push({ kind: 'target-occupied', detail: { title: r.to, path: to } });
       continue;
     }
+    // A rename rewrites the same machine half a relocate does, so it asks the
+    // same question first: is this note one we understand well enough to
+    // replace everything above `## Notizen`?
+    const rewritable = rewritableNote(note);
+    if (!rewritable.ok) {
+      conflicts.push({ kind: 'unstampable-note', detail: { path: note.file, missing: rewritable.missing } });
+      continue;
+    }
     renames.push({
       from: note.file,
       to,
       body: entry ? renderNote({
         ...entry, status: note.frontmatter.status || 'aktiv',
-        created: note.frontmatter.created, lastModified: nowStamp(now),
+        // Same default as the relocate branch: a fresh stamp, never the
+        // literal `undefined`.
+        created: note.frontmatter.created || nowStamp(now),
+        lastModified: nowStamp(now),
       }, note.replaceable ? '' : note.notesZone)
         : fs.readFileSync(note.file, 'utf8'),
     });
@@ -754,7 +882,7 @@ function applyPlan(vault, options = {}) {
   if (!write) {
     return {
       created: [], relocated: [], moved: [], renamed: [],
-      unchanged: plan.unchanged.length,
+      unchanged: unclaimedByRename(plan.unchanged, plan.renamed).length,
       planned: writes.length + moves.length + renames.length,
       // CARRIED RULING 2: conflicts ride along even in preview, so a report
       // (or a human reading the preview) can name every note that was left
@@ -786,7 +914,9 @@ function applyPlan(vault, options = {}) {
   }
   // An index regenerated only when somebody calls the function by hand is the
   // drift this skill exists to end. Wired here; the findings ledger below it.
-  rebuildIndex(libraryDir, { write: true, retiredSubfolder: config.retiredSubfolder });
+  rebuildIndex(libraryDir, {
+    write: true, retiredSubfolder: config.retiredSubfolder, parts: indexParts,
+  });
 
   const result = {
     // FIX (round 1, Finding 2): `writes` mixes create-kind and relocate-kind
@@ -800,7 +930,9 @@ function applyPlan(vault, options = {}) {
     renamed: renames.map((r) => r.to),
     // writeFindings (Task 9) reads this as a number. Returning the bucket itself
     // here would put a shape mismatch one task downstream of where it was made.
-    unchanged: plan.unchanged.length,
+    // Projected past the rename records for the same reason renderPreview is:
+    // a note the rename branch moved and rewrote is not unchanged.
+    unchanged: unclaimedByRename(plan.unchanged, plan.renamed).length,
     // CARRIED RULING 2: conflicts are excluded from every action bucket above
     // (diffLibrary never puts a conflicted note/entry into created,
     // relocated, retired, renamed, or unchanged), but they still need to be
@@ -815,6 +947,7 @@ module.exports = {
   readLibrary, renderPreview, collect, main,
   applyPlan, MassChangeError, EmptyInventoryError,
   LibraryPathNotConfiguredError, LibraryDirectoryMissingError, RetireCapError,
+  IndexMalformedError, IndexRowLossError,
   rebuildIndex, writeFindings,
   UsageError, parseApplyFlags, renderApplyPreview, renderApplyResult,
 };

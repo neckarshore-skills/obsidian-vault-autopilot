@@ -16,7 +16,7 @@ For implementation detail and internal release notes, see [`logs/changelog.md`](
 
 ### Note on this release
 
-This version bump matters beyond the new skill. Forty-two commits landed on `main` between v0.3.0 (2026-06-27) and this release without the version number moving, so an installed plugin has been stale since 2026-06-17 and `claude plugin update` has been answering "already at the latest version (0.3.0)" the entire time — silently withholding every one of those commits, including two fixes already on `main` and already believed shipped:
+This version bump matters beyond the new skill. Forty-two commits landed on `main` between v0.3.0 (2026-06-27) and this release without the version number moving, so an installed plugin has been stale since 2026-06-27 and `claude plugin update` has been answering "already at the latest version (0.3.0)" the entire time — silently withholding every one of those commits, including two fixes already on `main` and already believed shipped:
 
 - **#41 — the body-boundary fix** (`fix(skills): boundaries no longer deny the body write they mandate`, 2026-08-13): the Nahbereich boundary callout in `inbox-sort` and `property-classify` had been forbidding the very body write those skills' own steps require.
 - **#83 — the payload cleanup** (`fix: stop shipping an org-internal session policy in the plugin payload`, 2026-07-30): an org-internal session policy file was being distributed inside the public plugin payload.

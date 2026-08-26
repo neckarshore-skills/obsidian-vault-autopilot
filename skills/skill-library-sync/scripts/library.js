@@ -45,12 +45,20 @@ function parseNote(text) {
   }
   const idx = rest.indexOf(NOTES_HEADING);
   if (idx === -1) {
-    return { frontmatter, machineBody: rest, notesZone: '', hasNotesHeading: false };
+    return {
+      frontmatter, machineBody: rest, notesZone: '',
+      hasFrontmatter: Boolean(fmMatch), hasNotesHeading: false,
+    };
   }
   return {
     frontmatter,
     machineBody: rest.slice(0, idx),
     notesZone: rest.slice(idx + NOTES_HEADING.length),
+    // `frontmatter` being empty does not mean there was no frontmatter block
+    // (`---\n---` parses to zero keys), and the two states are not
+    // interchangeable to a caller deciding whether a note ever opted into the
+    // body-boundary contract. Report the block's presence as its own fact.
+    hasFrontmatter: Boolean(fmMatch),
     hasNotesHeading: true,
   };
 }
