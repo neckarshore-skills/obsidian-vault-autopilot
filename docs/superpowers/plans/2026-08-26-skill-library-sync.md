@@ -1215,8 +1215,12 @@ function applyPlan(vault, options = {}) {
   const write = Boolean(options.write);
   const now = options.now || new Date();
   const max = options.max || DEFAULT_MAX;
-  const { config, libraryDir, notes } = collect(vault);
-  const inventory = options.inventory || collect(vault).inventory;
+  // ONE collect call. Two would re-scan every plugin directory on disk for a
+  // single value, and on a live-edited vault the second call's notes could differ
+  // from the first -- an inconsistency, not merely waste.
+  const collected = collect(vault);
+  const { config, libraryDir, notes } = collected;
+  const inventory = options.inventory || collected.inventory;
   const plan = diffLibrary(inventory, notes);
 
   const touched = plan.created.length + plan.relocated.length
@@ -1236,8 +1240,13 @@ function applyPlan(vault, options = {}) {
         created: nowStamp(now), lastModified: nowStamp(now) }, ''),
     });
   }
+  const renamedFrom = new Set(plan.renamed.map((r) => r.from));
   for (const entry of plan.relocated) {
     const note = entry.note;
+    // A note that is ALSO being renamed is written by the rename branch alone.
+    // Writing it here too would recreate the old path after the rename moved it,
+    // leaving two notes for one skill -- and the stale one holds the user's prose.
+    if (renamedFrom.has(note.title)) continue;
     writes.push({
       kind: 'relocate',
       file: note.file,
@@ -1301,7 +1310,11 @@ function applyPlan(vault, options = {}) {
     fs.writeFileSync(m.to, m.body);
     fs.rmSync(m.from);
   }
-  return {
+  // An index regenerated only when somebody calls the function by hand is the
+  // drift this skill exists to end. Wired here; the findings ledger below it.
+  rebuildIndex(libraryDir, { write: true });
+
+  const result = {
     written: writes.map((w) => w.file),
     moved: moves.map((m) => m.to),
     renamed: renames.map((r) => r.to),
@@ -1309,6 +1322,8 @@ function applyPlan(vault, options = {}) {
     // here would put a shape mismatch one task downstream of where it was made.
     unchanged: plan.unchanged.length,
   };
+  writeFindings(vault, result, { now });
+  return result;
 }
 ```
 
@@ -1423,12 +1438,19 @@ function rebuildIndex(libraryDir, options = {}) {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 4: Confirm it is wired into the write path**
+
+`applyPlan` (Task 7) contains `rebuildIndex(libraryDir, { write: true });` before it
+assembles its result. Confirm the call is there and that `rebuildIndex` is defined
+above it in the file. An index regenerated only when somebody calls the function by
+hand is the drift this skill exists to end.
+
+- [ ] **Step 5: Run test to verify it passes**
 
 Run: `node --test skills/skill-library-sync/tests/index.test.js`
 Expected: PASS, 3 tests
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add skills/skill-library-sync/scripts/cli.js skills/skill-library-sync/tests/index.test.js
@@ -1539,12 +1561,18 @@ function writeFindings(vault, result, options = {}) {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 4: Confirm it is wired into the write path**
+
+`applyPlan` (Task 7) contains `writeFindings(vault, result, { now });` before its
+`return`. Confirm the call is there and that `writeFindings` is defined above it. A
+ledger convention nothing calls is a convention only on paper.
+
+- [ ] **Step 5: Run test to verify it passes**
 
 Run: `node --test skills/skill-library-sync/tests/findings.test.js`
 Expected: PASS, 3 tests
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add skills/skill-library-sync/scripts/cli.js skills/skill-library-sync/tests/findings.test.js
