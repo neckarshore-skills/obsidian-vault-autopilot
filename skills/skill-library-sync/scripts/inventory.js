@@ -17,8 +17,9 @@ function readSkillDescription(skillDir) {
     if (!fm) return '';
     const m = fm[1].match(/^description: *(.*)$/m);
     return m ? m[1].trim().replace(/^["']|["']$/g, '') : '';
-  } catch {
-    return '';
+  } catch (err) {
+    if (err.code === 'ENOENT') return '';
+    throw err;
   }
 }
 
@@ -49,7 +50,13 @@ function buildInventory({ ownSkillsDir, installedPluginsPath, sourceRoots }) {
   let installed = { plugins: {} };
   try {
     installed = JSON.parse(fs.readFileSync(installedPluginsPath, 'utf8'));
-  } catch { /* no plugins installed is a valid state */ }
+  } catch (err) {
+    if (err.code === 'ENOENT') {
+      /* no plugins installed is a valid state */
+    } else {
+      throw new Error(`installed plugins manifest is unreadable at ${installedPluginsPath}: ${err.message}`);
+    }
+  }
   for (const [key, value] of Object.entries(installed.plugins || {})) {
     const [pluginName, marketplace = ''] = key.split('@');
     const herkunft = /neckarshore/i.test(key) ? 'org-plugin' : 'extern';

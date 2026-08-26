@@ -81,3 +81,40 @@ test('the inventory reaches exactly one level deep and never walks the tree', ()
   const inv = buildInventory({ ownSkillsDir: f.own, installedPluginsPath: f.installed, sourceRoots: [f.repo] });
   assert.ok(!inv.some((e) => e.name === 'not-a-skill'));
 });
+
+test('a corrupt manifest (invalid JSON) throws with the file path in the message', () => {
+  const f = fixture();
+  fs.writeFileSync(f.installed, 'not valid json {{{');
+  assert.throws(
+    () => buildInventory({ ownSkillsDir: f.own, installedPluginsPath: f.installed, sourceRoots: [] }),
+    (err) => err.message.includes(f.installed) && err.message.includes('unreadable'),
+  );
+});
+
+test('a missing manifest does not throw; own skills are still found', () => {
+  const f = fixture();
+  fs.unlinkSync(f.installed);
+  const inv = buildInventory({ ownSkillsDir: f.own, installedPluginsPath: f.installed, sourceRoots: [] });
+  assert.ok(inv.some((e) => e.name === 'note-rename'));
+  assert.strictEqual(inv.filter((e) => e.herkunft === 'eigen').length, 1);
+});
+
+test('readSkillDescription throws when SKILL.md is not readable (e.g., is a directory)', () => {
+  const f = fixture();
+  const skillDir = path.join(f.own, 'bad-skill');
+  fs.mkdirSync(skillDir, { recursive: true });
+  fs.mkdirSync(path.join(skillDir, 'SKILL.md'), { recursive: true });
+  const { readSkillDescription } = require('../scripts/inventory.js');
+  assert.throws(
+    () => readSkillDescription(skillDir),
+    (err) => err.code !== 'ENOENT',
+  );
+});
+
+test('readSkillDescription returns empty string for missing SKILL.md', () => {
+  const f = fixture();
+  const skillDir = path.join(f.own, 'no-skill-md');
+  fs.mkdirSync(skillDir, { recursive: true });
+  const { readSkillDescription } = require('../scripts/inventory.js');
+  assert.strictEqual(readSkillDescription(skillDir), '');
+});
