@@ -115,3 +115,13 @@ test('three runs on the same day still carry exactly one frontmatter header', ()
   assert.strictEqual(headerCount, 2, 'exactly one --- ... --- frontmatter block, not one per run');
   assert.strictEqual((text.match(/## Run/g) || []).length, 3);
 });
+
+// RULING 4a (task-10): the run heading is `## Run HH:MM` per
+// references/findings-file.md -- the date is already carried in the
+// frontmatter, so it must not be repeated in the heading.
+test('the run heading is HH:MM, not a repeated date', () => {
+  const v = fs.mkdtempSync(path.join(os.tmpdir(), 'sls-find10-'));
+  const text = fs.readFileSync(writeFindings(v, RESULT, { now: new Date('2026-08-26T12:34:00') }), 'utf8');
+  assert.match(text, /^## Run 12:34$/m);
+  assert.doesNotMatch(text, /## Run 2026-08-26/);
+});

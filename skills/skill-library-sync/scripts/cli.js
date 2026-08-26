@@ -1,9 +1,10 @@
 'use strict';
 // cli.js — fs + CLI shell over the pure engine.
 //
-//   scan  <vault>            print the inventory, write nothing
-//   diff  <vault>            print the four buckets plus conflicts, write nothing
-//   apply <vault> --write    execute behind the confirm gate (later task)
+//   scan  <vault>                                print the inventory, write nothing
+//   diff  <vault>                                print the four buckets plus conflicts, write nothing
+//   apply <vault>                                preview what apply --write would do; write nothing
+//   apply <vault> --write [--max n] [--retire-max n]   apply behind the two caps
 //
 // Plan-then-write: every note is rendered in memory and every guard throws
 // BEFORE the first write, so a refusal leaves the library untouched.
@@ -133,11 +134,107 @@ function collect(vault) {
   };
 }
 
+// A usage error (missing command/vault, an unknown flag, a non-numeric or
+// missing value for --max/--retire-max) is exit 2 -- the same code a missing
+// command already used. It is distinct from the guard errors below, which are
+// also exit 2 for a different reason: a usage error means the invocation
+// itself was malformed, a guard error means the invocation was well-formed but
+// the vault/config was not ready for a write.
+class UsageError extends Error {}
+
+// Parses everything after `apply <vault>`. Kept separate from main() so the
+// flag grammar -- and its failure modes -- has one place to read.
+function parseApplyFlags(rest) {
+  const opts = { write: false };
+  for (let i = 0; i < rest.length; i++) {
+    const arg = rest[i];
+    if (arg === '--write') { opts.write = true; continue; }
+    if (arg === '--max' || arg === '--retire-max') {
+      const value = rest[i + 1];
+      if (value === undefined || !/^\d+$/.test(value)) {
+        throw new UsageError(`${arg} requires a numeric value, got: ${value === undefined ? '(none)' : value}`);
+      }
+      i += 1;
+      if (arg === '--max') opts.max = Number(value);
+      else opts.retireMax = Number(value);
+      continue;
+    }
+    throw new UsageError(`unknown flag: ${arg}`);
+  }
+  return opts;
+}
+
+// applyPlan's write:true result names every action (written/moved/renamed are
+// file-path arrays), so this mirrors renderPreview's shape.
+function renderApplyResult(result) {
+  const lines = [
+    `created:   ${result.written.length}`,
+    `retired:   ${result.moved.length}`,
+    `renamed:   ${result.renamed.length}`,
+    `unchanged: ${result.unchanged}`,
+    `conflicts: ${result.conflicts.length}`,
+  ];
+  for (const f of result.written) lines.push(`  create: ${f}`);
+  for (const f of result.moved) lines.push(`  retire: ${f}`);
+  for (const f of result.renamed) lines.push(`  rename: -> ${f}`);
+  for (const c of result.conflicts) lines.push(`  conflict: ${describeConflict(c)}`);
+  return lines.join('\n');
+}
+
+// applyPlan's write:false result is NOT diffLibrary's four-bucket shape --
+// it also runs the write-side guards (the mass-change/retire caps, the
+// library-path checks), so it collapses created/relocated/retired/renamed
+// into a single `planned` total rather than naming each bucket. That is a
+// real difference from `diff`'s output, not an oversight: `diff` shows what
+// would happen; `apply` without `--write` shows whether the guards would let
+// it happen, plus the same conflicts channel and (when relevant) the
+// library-path warning.
+function renderApplyPreview(result) {
+  const lines = [];
+  if (result.libraryPathWarning) lines.push(`warning: ${result.libraryPathWarning}`);
+  lines.push(`planned:   ${result.planned}`);
+  lines.push(`unchanged: ${result.unchanged}`);
+  lines.push(`conflicts: ${result.conflicts.length}`);
+  for (const c of result.conflicts) lines.push(`  conflict: ${describeConflict(c)}`);
+  return lines.join('\n');
+}
+
 function main(argv) {
-  const [command, vault] = argv;
+  const [command, vault, ...rest] = argv;
   if (!command || !vault) {
-    process.stderr.write('usage: cli.js <scan|diff|apply> <vault> [--write]\n');
+    process.stderr.write('usage: cli.js <scan|diff|apply> <vault> [--write] [--max <n>] [--retire-max <n>]\n');
     return 2;
+  }
+  if (command === 'apply') {
+    let opts;
+    try {
+      opts = parseApplyFlags(rest);
+    } catch (err) {
+      if (err instanceof UsageError) {
+        process.stderr.write(`${err.message}\n`);
+        return 2;
+      }
+      throw err;
+    }
+    try {
+      const result = applyPlan(vault, opts);
+      process.stdout.write(`${opts.write ? renderApplyResult(result) : renderApplyPreview(result)}\n`);
+      return 0;
+    } catch (err) {
+      // RULING 2: refusals (the run understood the situation and declined)
+      // are exit 1; guard errors (the run was misconfigured) are exit 2.
+      if (err instanceof MassChangeError || err instanceof RetireCapError
+        || err instanceof EmptyInventoryError) {
+        process.stderr.write(`${err.message}\n`);
+        return 1;
+      }
+      if (err instanceof LibraryPathNotConfiguredError
+        || err instanceof LibraryDirectoryMissingError) {
+        process.stderr.write(`${err.message}\n`);
+        return 2;
+      }
+      throw err;
+    }
   }
   const { inventory, notes } = collect(vault);
   if (command === 'scan') {
@@ -229,6 +326,14 @@ function stamp(date) {
 function nowStamp(date) {
   const p = (n) => String(n).padStart(2, '0');
   return `${stamp(date)} ${p(date.getHours())}:${p(date.getMinutes())}`;
+}
+
+// RULING 4a: the findings-ledger convention (references/findings-file.md)
+// specifies a `## Run HH:MM` section heading -- the date is already carried
+// in the frontmatter, so repeating it in every run heading was redundant.
+function timeStamp(date) {
+  const p = (n) => String(n).padStart(2, '0');
+  return `${p(date.getHours())}:${p(date.getMinutes())}`;
 }
 
 // The one place a herkunft maps to its library subfolder -- used for both
@@ -423,7 +528,7 @@ function writeFindings(vault, result, options = {}) {
 
   const block = [
     '',
-    `## Run ${nowStamp(now)}`,
+    `## Run ${timeStamp(now)}`,
     '',
     'counts:',
     `  created: ${result.written.length}`,
@@ -687,6 +792,7 @@ module.exports = {
   applyPlan, MassChangeError, EmptyInventoryError,
   LibraryPathNotConfiguredError, LibraryDirectoryMissingError, RetireCapError,
   rebuildIndex, writeFindings,
+  UsageError, parseApplyFlags, renderApplyPreview, renderApplyResult,
 };
 
 if (require.main === module) process.exit(main(process.argv.slice(2)));

@@ -19,9 +19,9 @@ in full before processing sensitive content.
 
 ## What This Does
 
-**Ten skills** manage your vault automatically — four launch-scope skills validated to Gold-Run coverage, plus six more shipped in beta and usable today.
+**Eleven skills** manage your vault automatically — four launch-scope skills validated to Gold-Run coverage, plus seven more shipped in beta and usable today.
 
-> **New in v0.3.0:** full tag management has landed. `tag-manage` (audit + convention cleanup) and `tag-organize` (nested tag hierarchy) are shipped and usable today — see the beta skills below.
+> **New in v0.4.0:** `skill-library-sync` reconciles a vault's Skill Library against the skills that actually exist — created, relocated, retired, and renamed notes, previewed before any write.
 
 ### Launch-scope skills (Gold-Run validated)
 
@@ -36,16 +36,17 @@ The **🧪 beta** skill is usable today with caveats — behavior may still chan
 
 ### Also available — beta (shipped & usable today)
 
-Six more skills ship in the codebase and run today. They have not yet been validated at the same Gold-Run coverage as the launch-scope skills, so behavior may still change before v1.0 — but they are real, installed, and usable now.
+Seven more skills ship in the codebase and run today. They have not yet been validated at the same Gold-Run coverage as the launch-scope skills, so behavior may still change before v1.0 — but they are real, installed, and usable now.
 
 | # | Skill | What it does | Status |
 |---|-------|-------------|--------|
 | 1 | **tag-manage** | Audits existing tags; scores against PascalCase convention (severity-classified); renames, merges, and removes duplicates / case variants / convention violations behind a preview-and-confirm gate with a rich vault-written report | 🧪 beta (shipped v0.2.1) |
 | 2 | **tag-organize** | Organizes flat tags into a nested hierarchy — AI-proposed parent/child families over existing tags, scored and split into Implement / Decide / Ignore (with per-family note-counts) in a browsable proposal note so you triage by confidence and impact, applied behind a confirm gate (Slice 1: structure only, no auto-tagging yet) | 🧪 beta (shipped v0.3.0) |
-| 3 | ai-paste-cleanup | Cleans AI-generated / pasted Markdown — strips citation markers, zero-width and non-breaking characters, bold/italic-wrapped headings, and blank-line runs; dry-run diff + a survival guard that protects links, checkboxes, and emoji | 🧪 beta |
-| 4 | note-quality-check | Scores notes by quality, recommends what to keep or delete | 🧪 beta |
-| 5 | property-classify | Sets lifecycle `status` and `type` properties automatically | 🧪 beta |
-| 6 | obsidian-bases-generator | Generates live `.base` dashboards from the properties that already exist in your vault — scans real property coverage first, then writes validated Bases you can open in Obsidian; never invents a property | 🧪 beta |
+| 3 | **skill-library-sync** | Reconciles a vault's Skill Library against the skills that actually exist — your own skills, installed plugins, and configured source repositories, read from named sources only. Creates notes for new skills, relocates moved ones, retires (never deletes) vanished ones, and renames notes that gained a second origin, behind a preview-and-confirm gate | 🧪 beta (shipped v0.4.0) |
+| 4 | ai-paste-cleanup | Cleans AI-generated / pasted Markdown — strips citation markers, zero-width and non-breaking characters, bold/italic-wrapped headings, and blank-line runs; dry-run diff + a survival guard that protects links, checkboxes, and emoji | 🧪 beta |
+| 5 | note-quality-check | Scores notes by quality, recommends what to keep or delete | 🧪 beta |
+| 6 | property-classify | Sets lifecycle `status` and `type` properties automatically | 🧪 beta |
+| 7 | obsidian-bases-generator | Generates live `.base` dashboards from the properties that already exist in your vault — scans real property coverage first, then writes validated Bases you can open in Obsidian; never invents a property | 🧪 beta |
 
 > **Tag hierarchy:** `tag-manage` can also nest flat tags under a parent you declare (`#daytrading` → `#Investing/DayTrading`). See the [Tag Hierarchy guide](docs/tag-hierarchy.md).
 
