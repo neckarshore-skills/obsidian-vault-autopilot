@@ -30,7 +30,7 @@ function renderNote(entry, notesZone) {
   const zone = notesZone && notesZone.trim() ? notesZone : `\n\n${STUB}\n`;
   const frontmatter = [
     '---',
-    `title: ${entry.name}`,
+    `title: ${yamlString(entry.name)}`,
     'type: skill',
     `description: ${yamlString(description)}`,
     `herkunft: ${entry.herkunft}`,

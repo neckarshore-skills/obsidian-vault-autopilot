@@ -51,3 +51,15 @@ test('a note without the heading reports hasNotesHeading false and an empty zone
   assert.strictEqual(parsed.hasNotesHeading, false);
   assert.strictEqual(parsed.notesZone, '');
 });
+
+test('a quoted value containing " and \\ round-trips correctly', () => {
+  const text = '---\ndescription: "Trigger phrases - \\"find duplicate photos\\", \\"dedupe\\""\n---\n\n# Test\n';
+  const parsed = parseNote(text);
+  assert.strictEqual(parsed.frontmatter.description, 'Trigger phrases - "find duplicate photos", "dedupe"');
+});
+
+test('an unquoted value keeps its backslashes verbatim', () => {
+  const text = '---\nraw: C:\\Users\\x\\file\n---\n\n# Test\n';
+  const parsed = parseNote(text);
+  assert.strictEqual(parsed.frontmatter.raw, 'C:\\Users\\x\\file');
+});

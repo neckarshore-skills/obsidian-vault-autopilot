@@ -20,7 +20,14 @@ test('a rendered note round-trips through parseNote', () => {
   const parsed = parseNote(renderNote(ENTRY, ''));
   assert.strictEqual(parsed.frontmatter.title, 'photo-dedup');
   assert.strictEqual(parsed.frontmatter.herkunft, 'org-plugin');
+  assert.strictEqual(parsed.frontmatter.description, ENTRY.description);
   assert.strictEqual(parsed.hasNotesHeading, true);
+});
+
+test('a title containing a colon round-trips correctly', () => {
+  const entry = { ...ENTRY, name: 'skill:colon', suffix: '' };
+  const parsed = parseNote(renderNote(entry, ''));
+  assert.strictEqual(parsed.frontmatter.title, 'skill:colon');
 });
 
 test('the description is carried in full and never cut mid-word', () => {

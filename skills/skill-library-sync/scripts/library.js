@@ -22,8 +22,13 @@ function parseNote(text) {
       const kv = line.match(/^([A-Za-z_][A-Za-z0-9_]*): *(.*)$/);
       if (!kv) continue;
       let value = kv[2].trim();
+      let wasQuoted = false;
       if (value.startsWith('"') && value.endsWith('"') && value.length > 1) {
+        wasQuoted = true;
         value = value.slice(1, -1);
+        // Unescape YAML: reverse the escaping done by yamlString.
+        // Replace \" with ", and \\ with \ (order matters: \\ first to avoid double-unescaping).
+        value = value.replace(/\\\\/g, '\x00').replace(/\\"/g, '"').replace(/\x00/g, '\\');
       }
       frontmatter[kv[1]] = value;
     }
