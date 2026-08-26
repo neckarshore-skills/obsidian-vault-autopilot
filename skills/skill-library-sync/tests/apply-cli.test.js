@@ -191,3 +191,36 @@ test('an unknown command is still a usage error: exit 2', () => {
   assert.strictEqual(code, 2);
   assert.match(err, /unknown command: bogus/);
 });
+
+// FIX (round 1, Finding 2): applyPlan used to merge create-kind and
+// relocate-kind writes into one `written` array, so `apply --write` printed
+// every relocated note as a "create:" line and inflated `created:` by
+// exactly the relocated count. A mixed batch (one genuinely new skill, one
+// existing note whose skill moved) must report both counts separately.
+test('apply --write reports created and relocated as separate counts for a mixed batch', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'sls-home-mixed-'));
+  const skillsDir = path.join(home, '.claude', 'skills');
+  for (const name of ['alpha', 'beta']) {
+    fs.mkdirSync(path.join(skillsDir, name), { recursive: true });
+    fs.writeFileSync(path.join(skillsDir, name, 'SKILL.md'), `---\ndescription: ${name}\n---\n`);
+  }
+
+  const vault = vaultWith();
+  const libDir = path.join(vault, 'Library', 'Skill Library', 'Eigene Skills');
+  fs.mkdirSync(libDir, { recursive: true });
+  // 'alpha' already has a note, but at a STALE ort -- the inventory now
+  // points it at .../skills/alpha, so this must be RELOCATED, not created.
+  // 'beta' has no note yet, so it must be CREATED. Two different buckets,
+  // one apply run.
+  const staleBody = renderNote({
+    name: 'alpha', suffix: '', description: 'd', herkunft: 'eigen', ort: '/somewhere/else',
+    plugin: '', status: 'aktiv', created: '2026-01-01 00:00', lastModified: '2026-01-01 00:00',
+  }, '');
+  fs.writeFileSync(path.join(libDir, 'Skill – alpha.md'), staleBody);
+
+  const { code, out } = withHome(home, () => captureIO(() => main(['apply', vault, '--write'])));
+  assert.strictEqual(code, 0);
+  assert.match(out, /created:\s+1/);
+  assert.match(out, /relocated:\s+1/);
+  assert.doesNotMatch(out, /created:\s+2/, 'a relocation must not be counted as a creation');
+});

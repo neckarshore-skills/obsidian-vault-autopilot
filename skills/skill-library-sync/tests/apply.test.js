@@ -258,7 +258,7 @@ test('a created note must never overwrite a conflicted note holding the user\'s 
   ] });
 
   assert.match(fs.readFileSync(fileA, 'utf8'), /Erste Kopie, meine eigene Notiz\./, 'the user\'s prose must survive');
-  assert.strictEqual(result.written.includes(fileA), false, 'nothing may be written to an occupied target');
+  assert.strictEqual(result.created.includes(fileA), false, 'nothing may be written to an occupied target');
   const occupied = result.conflicts.find((c) => c.kind === 'target-occupied');
   assert.ok(occupied, 'the skipped create must be reported as a conflict');
   assert.strictEqual(occupied.detail.title, 'Skill – dup');
@@ -444,7 +444,7 @@ test('a legitimate create survives a same-name duplicate-inventory-entry conflic
   ] });
 
   const expected = path.join(f.lib, 'Externe Plugins', 'Skill – dup.md');
-  assert.ok(result.written.includes(expected), 'the valid (dup, extern) entry must be created');
+  assert.ok(result.created.includes(expected), 'the valid (dup, extern) entry must be created');
   assert.ok(fs.existsSync(expected));
   const bogus = result.conflicts.find((c) => c.kind === 'target-occupied');
   assert.strictEqual(bogus, undefined, 'no target-occupied conflict may be reported for a path that was never occupied');

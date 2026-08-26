@@ -42,13 +42,13 @@ write only after the user confirms.
 
 ## Step 1 - Scan
 
-    node scripts/cli.js scan "$OBSIDIAN_VAULT_PATH"
+    node "${CLAUDE_PLUGIN_ROOT}/skills/skill-library-sync/scripts/cli.js" scan "$OBSIDIAN_VAULT_PATH"
 
 Prints how many skills exist and how many notes describe them. Writes nothing.
 
 ## Step 2 - Diff
 
-    node scripts/cli.js diff "$OBSIDIAN_VAULT_PATH"
+    node "${CLAUDE_PLUGIN_ROOT}/skills/skill-library-sync/scripts/cli.js" diff "$OBSIDIAN_VAULT_PATH"
 
 Prints the four buckets - created, relocated, retired, renamed - plus conflicts,
 each with a count, and names every note that would change. Writes nothing.
@@ -57,8 +57,8 @@ Show this output to the user. Do not proceed without an explicit confirmation.
 
 ## Step 3 - Apply
 
-    node scripts/cli.js apply "$OBSIDIAN_VAULT_PATH"
-    node scripts/cli.js apply "$OBSIDIAN_VAULT_PATH" --write
+    node "${CLAUDE_PLUGIN_ROOT}/skills/skill-library-sync/scripts/cli.js" apply "$OBSIDIAN_VAULT_PATH"
+    node "${CLAUDE_PLUGIN_ROOT}/skills/skill-library-sync/scripts/cli.js" apply "$OBSIDIAN_VAULT_PATH" --write
 
 `apply` without `--write` is a preview, but it is not the same preview as
 `diff`: `diff` only classifies notes into buckets, while `apply` in preview
@@ -135,8 +135,8 @@ Every refusal and guard error prints its message to stderr.
 
 Every `apply --write` run appends a block to
 `${OBSIDIAN_VAULT_PATH}/_vault-autopilot/findings/<date>-skill-library-sync.md`:
-a `## Run HH:MM` heading, then a `counts:` list (created, retired, renamed,
-unchanged, conflicts) and one line per conflict. This records that a run
+a `## Run HH:MM` heading, then a `counts:` list (created, relocated, retired,
+renamed, unchanged, conflicts) and one line per conflict. This records that a run
 happened and what it touched - it does not classify individual findings by
 severity.
 

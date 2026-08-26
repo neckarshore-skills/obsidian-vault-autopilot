@@ -115,6 +115,11 @@ function renderPreview(result) {
   ];
   for (const r of result.renamed) lines.push(`  rename: ${r.from} -> ${r.to}`);
   for (const c of result.created) lines.push(`  create: ${noteTitle(c)}`);
+  // FIX (round 1, Finding 3): SKILL.md's diff step promises to name "every
+  // note that would change" -- relocated was counted but never named, so a
+  // confirm gate covering ~40 unnamed relocations at real scale was strictly
+  // less informative than the other four buckets it sits beside.
+  for (const r of result.relocated) lines.push(`  relocate: ${r.note.title} -> ${r.ort}`);
   for (const r of result.retired) lines.push(`  retire: ${r.title}`);
   for (const c of result.conflicts) lines.push(`  conflict: ${describeConflict(c)}`);
   return lines.join('\n');
@@ -164,17 +169,26 @@ function parseApplyFlags(rest) {
   return opts;
 }
 
-// applyPlan's write:true result names every action (written/moved/renamed are
-// file-path arrays), so this mirrors renderPreview's shape.
+// applyPlan's write:true result names every action (created/relocated/moved/
+// renamed are file-path arrays), so this mirrors renderPreview's shape.
+//
+// FIX (round 1, Finding 2): applyPlan used to return a single `written`
+// array that merged create-kind AND relocate-kind writes, so this function
+// labelled the sum `created:` and printed a `create:` line for every
+// relocated file too -- a relocation is not a creation, and the SKILL.md
+// Report template promises both counts separately. applyPlan's result now
+// carries `created` and `relocated` as distinct arrays; render them as such.
 function renderApplyResult(result) {
   const lines = [
-    `created:   ${result.written.length}`,
+    `created:   ${result.created.length}`,
+    `relocated: ${result.relocated.length}`,
     `retired:   ${result.moved.length}`,
     `renamed:   ${result.renamed.length}`,
     `unchanged: ${result.unchanged}`,
     `conflicts: ${result.conflicts.length}`,
   ];
-  for (const f of result.written) lines.push(`  create: ${f}`);
+  for (const f of result.created) lines.push(`  create: ${f}`);
+  for (const f of result.relocated) lines.push(`  relocate: ${f}`);
   for (const f of result.moved) lines.push(`  retire: ${f}`);
   for (const f of result.renamed) lines.push(`  rename: -> ${f}`);
   for (const c of result.conflicts) lines.push(`  conflict: ${describeConflict(c)}`);
@@ -531,7 +545,11 @@ function writeFindings(vault, result, options = {}) {
     `## Run ${timeStamp(now)}`,
     '',
     'counts:',
-    `  created: ${result.written.length}`,
+    // FIX (round 1, Finding 2): `created` and `relocated` used to be one
+    // merged `written` count reported as "created" -- a relocation is not a
+    // creation. Split so the ledger's `created:` means created.
+    `  created: ${result.created.length}`,
+    `  relocated: ${result.relocated.length}`,
     `  retired: ${result.moved.length}`,
     `  renamed: ${result.renamed.length}`,
     `  unchanged: ${result.unchanged}`,
@@ -735,7 +753,7 @@ function applyPlan(vault, options = {}) {
 
   if (!write) {
     return {
-      written: [], moved: [], renamed: [],
+      created: [], relocated: [], moved: [], renamed: [],
       unchanged: plan.unchanged.length,
       planned: writes.length + moves.length + renames.length,
       // CARRIED RULING 2: conflicts ride along even in preview, so a report
@@ -771,7 +789,13 @@ function applyPlan(vault, options = {}) {
   rebuildIndex(libraryDir, { write: true, retiredSubfolder: config.retiredSubfolder });
 
   const result = {
-    written: writes.map((w) => w.file),
+    // FIX (round 1, Finding 2): `writes` mixes create-kind and relocate-kind
+    // entries -- a single `written` array collapsed the two into one count,
+    // reported as "created" even for relocated notes. Split by kind here so
+    // every downstream consumer (renderApplyResult, writeFindings) reports
+    // creations and relocations as the two distinct things they are.
+    created: writes.filter((w) => w.kind === 'create').map((w) => w.file),
+    relocated: writes.filter((w) => w.kind === 'relocate').map((w) => w.file),
     moved: moves.map((m) => m.to),
     renamed: renames.map((r) => r.to),
     // writeFindings (Task 9) reads this as a number. Returning the bucket itself

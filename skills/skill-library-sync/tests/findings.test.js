@@ -6,7 +6,10 @@ const os = require('node:os');
 const path = require('node:path');
 const { writeFindings } = require('../scripts/cli.js');
 
-const RESULT = { written: ['/v/a.md'], moved: ['/v/Entfallen/b.md'], renamed: ['Skill – c (eigen)'], unchanged: 12, conflicts: [] };
+const RESULT = {
+  created: ['/v/a.md'], relocated: [], moved: ['/v/Entfallen/b.md'],
+  renamed: ['Skill – c (eigen)'], unchanged: 12, conflicts: [],
+};
 
 test('the ledger lands at the documented path', () => {
   const v = fs.mkdtempSync(path.join(os.tmpdir(), 'sls-find-'));
@@ -124,4 +127,20 @@ test('the run heading is HH:MM, not a repeated date', () => {
   const text = fs.readFileSync(writeFindings(v, RESULT, { now: new Date('2026-08-26T12:34:00') }), 'utf8');
   assert.match(text, /^## Run 12:34$/m);
   assert.doesNotMatch(text, /## Run 2026-08-26/);
+});
+
+// FIX (round 1, Finding 2): the ledger used to read `result.written.length`
+// for its `created:` count, which merged create-kind and relocate-kind
+// writes into one number labelled "created". A mixed batch must render both
+// counts separately -- created must not include what was actually relocated.
+test('the ledger reports created and relocated as two distinct counts', () => {
+  const v = fs.mkdtempSync(path.join(os.tmpdir(), 'sls-find11-'));
+  const result = {
+    ...RESULT,
+    created: ['/v/lib/Eigene Skills/Skill – a.md'],
+    relocated: ['/v/lib/Eigene Skills/Skill – b.md', '/v/lib/Externe Plugins/Skill – c.md'],
+  };
+  const text = fs.readFileSync(writeFindings(v, result, { now: new Date('2026-08-26T12:00:00Z') }), 'utf8');
+  assert.match(text, /^  created: 1$/m);
+  assert.match(text, /^  relocated: 2$/m);
 });

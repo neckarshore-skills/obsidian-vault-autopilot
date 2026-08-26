@@ -73,6 +73,21 @@ test('the preview counts conflicts and names each one', () => {
   assert.match(text, /duplicate-inventory-entry.*y/);
 });
 
+// FIX (round 1, Finding 3): SKILL.md's diff step promises to name "every
+// note that would change" -- relocated was counted but never named. Each
+// relocated entry carries `note` (the existing library note) and `ort` (the
+// inventory's new location), so the preview must show both: what moved and
+// where it moved to.
+test('the preview names every relocated note, not just its count', () => {
+  const text = renderPreview({
+    created: [], retired: [], unchanged: [], renamed: [],
+    relocated: [{ note: { title: 'Skill – alpha' }, ort: '/new/path/alpha' }],
+    conflicts: [],
+  });
+  assert.match(text, /relocated:\s+1/);
+  assert.match(text, /relocate: Skill – alpha -> \/new\/path\/alpha/);
+});
+
 // RULING 2: a CRLF-authored note must still yield its frontmatter, because
 // a missing `ort` would make downstream classify it as needing rewrite on
 // every run, forever.
