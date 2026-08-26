@@ -18,13 +18,12 @@ function expandHome(p) {
 }
 
 // A deliberately small YAML reader: this section is two scalars and a list, and
-// pulling in a parser for that would be the larger risk.
-function readSection(text) {
-  const fence = String(text).match(/```yaml\s*\n([\s\S]*?)\n```/);
-  if (!fence) return {};
-  const lines = fence[1].split('\n');
-  const start = lines.findIndex((l) => /^skill_library: *$/.test(l));
-  if (start === -1) return {};
+// pulling in a parser for that would be the larger risk. Only two forms are
+// supported: a 2-space-indented `key: value` scalar and a 4-space-indented
+// `- item` list entry, both under a `skill_library:` key at column 0 — inline
+// flow-style lists (`source_roots: [a, b]`) and tab indentation are not
+// recognized and are silently treated as absent, never as an error.
+function parseSection(lines, start) {
   const out = { sourceRoots: [] };
   let inList = false;
   for (const line of lines.slice(start + 1)) {
@@ -43,6 +42,22 @@ function readSection(text) {
     }
   }
   return out;
+}
+
+// Scan ALL ```yaml fences in the file and use the first one that actually
+// contains a `skill_library:` line — matching only the FIRST yaml fence in
+// the file silently discards a well-formed section if any unrelated yaml
+// fence precedes it.
+function readSection(text) {
+  const s = String(text);
+  const fenceRe = /```yaml\s*\n([\s\S]*?)\n```/g;
+  let match;
+  while ((match = fenceRe.exec(s)) !== null) {
+    const lines = match[1].split('\n');
+    const start = lines.findIndex((l) => /^skill_library: *$/.test(l));
+    if (start !== -1) return parseSection(lines, start);
+  }
+  return {};
 }
 
 function loadConfig(vaultPath) {

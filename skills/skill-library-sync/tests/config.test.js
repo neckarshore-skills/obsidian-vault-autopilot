@@ -38,3 +38,17 @@ test('a malformed fence falls back to defaults rather than throwing', () => {
   const cfg = loadConfig(vaultWith('```yaml\nskill_library: [unclosed\n```'));
   assert.strictEqual(cfg.retiredSubfolder, DEFAULTS.retiredSubfolder);
 });
+
+test('a yaml fence for something else, placed BEFORE the skill_library fence, is skipped', () => {
+  const v = vaultWith([
+    '# Config', '',
+    '```yaml',
+    'unrelated_section:',
+    '  foo: "bar"',
+    '```', '',
+    '```yaml', 'skill_library:',
+    '  library_path: "020_Processes/Library Meta/Skill Library"',
+    '```', ''].join('\n'));
+  const cfg = loadConfig(v);
+  assert.strictEqual(cfg.libraryPath, '020_Processes/Library Meta/Skill Library');
+});
