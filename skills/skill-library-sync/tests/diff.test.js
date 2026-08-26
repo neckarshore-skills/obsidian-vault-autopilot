@@ -3,6 +3,12 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 const { diffLibrary } = require('../scripts/diff.js');
 
+// `renamed` entries carry the claimed note object alongside from/to (so the
+// write path never has to re-look the note up by title string); these
+// assertions check from/to shape only, not the (already-covered-elsewhere)
+// note identity.
+const stripNote = (arr) => arr.map(({ from, to }) => ({ from, to }));
+
 const inv = (name, herkunft, ort) => ({ name, herkunft, ort, plugin: '', description: 'd' });
 const note = (name, suffix, ort) => ({
   title: suffix ? `Skill – ${name} (${suffix})` : `Skill – ${name}`,
@@ -39,7 +45,7 @@ test('a skill acquiring a second origin renames the existing suffix-less note', 
     [inv('agents-sdk', 'eigen', '/own'), inv('agents-sdk', 'extern', '/plugin')],
     [note('agents-sdk', '', '/own')],
   );
-  assert.deepStrictEqual(d.renamed, [
+  assert.deepStrictEqual(stripNote(d.renamed), [
     { from: 'Skill – agents-sdk', to: 'Skill – agents-sdk (eigen)' },
   ]);
   assert.strictEqual(d.created.length, 1);
@@ -99,8 +105,8 @@ test('rename anchored on ort: same result for an inventory in either order', () 
   const fwd = diffLibrary([inv('q', 'eigen', '/A'), inv('q', 'extern', '/B')], bareNote);
   const rev = diffLibrary([inv('q', 'extern', '/B'), inv('q', 'eigen', '/A')], bareNote);
   const expected = [{ from: 'Skill – q', to: 'Skill – q (extern)' }];
-  assert.deepStrictEqual(fwd.renamed, expected);
-  assert.deepStrictEqual(rev.renamed, expected);
+  assert.deepStrictEqual(stripNote(fwd.renamed), expected);
+  assert.deepStrictEqual(stripNote(rev.renamed), expected);
 });
 
 test('rename with no ort match: deterministic by sorted herkunft, regardless of order', () => {
@@ -108,8 +114,8 @@ test('rename with no ort match: deterministic by sorted herkunft, regardless of 
   const fwd = diffLibrary([inv('q', 'eigen', '/A'), inv('q', 'extern', '/B')], bareNote);
   const rev = diffLibrary([inv('q', 'extern', '/B'), inv('q', 'eigen', '/A')], bareNote);
   const expected = [{ from: 'Skill – q', to: 'Skill – q (eigen)' }]; // 'eigen' < 'extern'
-  assert.deepStrictEqual(fwd.renamed, expected);
-  assert.deepStrictEqual(rev.renamed, expected);
+  assert.deepStrictEqual(stripNote(fwd.renamed), expected);
+  assert.deepStrictEqual(stripNote(rev.renamed), expected);
 });
 
 test('rename anchor: two entries sharing the note\'s ort still resolve deterministically by herkunft', () => {
@@ -121,8 +127,21 @@ test('rename anchor: two entries sharing the note\'s ort still resolve determini
   const fwd = diffLibrary([inv('r', 'eigen', '/SAME'), inv('r', 'extern', '/SAME')], bareNote);
   const rev = diffLibrary([inv('r', 'extern', '/SAME'), inv('r', 'eigen', '/SAME')], bareNote);
   const expected = [{ from: 'Skill – r', to: 'Skill – r (eigen)' }]; // 'eigen' < 'extern'
-  assert.deepStrictEqual(fwd.renamed, expected);
-  assert.deepStrictEqual(rev.renamed, expected);
+  assert.deepStrictEqual(stripNote(fwd.renamed), expected);
+  assert.deepStrictEqual(stripNote(rev.renamed), expected);
+});
+
+// M3: the write path must not have to re-find the note by title string --
+// the object that diffLibrary already claimed is carried on the renamed
+// entry itself.
+test('a renamed entry carries the actual claimed note object, not just its title', () => {
+  const bareNote = note('agents-sdk', '', '/own');
+  const d = diffLibrary(
+    [inv('agents-sdk', 'eigen', '/own'), inv('agents-sdk', 'extern', '/plugin')],
+    [bareNote],
+  );
+  assert.strictEqual(d.renamed.length, 1);
+  assert.strictEqual(d.renamed[0].note, bareNote);
 });
 
 test('a single-origin entry must not claim a note carrying a different origin suffix', () => {

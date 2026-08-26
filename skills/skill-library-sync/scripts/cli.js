@@ -11,7 +11,7 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { parseNote, isReplaceableZone } = require('./library.js');
+const { parseNote, isReplaceableZone, NOTES_HEADING } = require('./library.js');
 const { noteTitle, renderNote } = require('./render.js');
 const { buildInventory } = require('./inventory.js');
 const { diffLibrary } = require('./diff.js');
@@ -34,9 +34,24 @@ function readdirSafe(dir) {
   }
 }
 
-function readLibrary(libraryDir) {
+// CRITICAL 1 (fix 1 of 2): a tombstone is not a library note. Without this
+// exclusion, readLibrary re-reads every note already retired into
+// `retiredSubfolder`, which is still absent from the inventory, so the next
+// run classifies it `retired` again -- with a move target identical to its
+// source -- and the move loop's unconditional `fs.rmSync(m.from)` deletes it.
+// Measured against a real vault: a note retired on run 1 no longer existed
+// after run 2. Excluding the subfolder here is the real fix (a returning
+// skill must not be matched against, and rewritten inside, its own
+// tombstone; Task 8's index must not list a retired note as live either).
+// The move loop below carries the belt-and-braces guard for the same
+// failure -- see CRITICAL 1 (fix 2 of 2).
+function readLibrary(libraryDir, options = {}) {
+  const retiredDir = options.retiredSubfolder
+    ? path.resolve(path.join(libraryDir, options.retiredSubfolder))
+    : null;
   const notes = [];
   const walk = (dir) => {
+    if (retiredDir && path.resolve(dir) === retiredDir) return;
     for (const e of readdirSafe(dir)) {
       const p = path.join(dir, e.name);
       if (e.isDirectory()) { walk(p); continue; }
@@ -94,7 +109,10 @@ function collect(vault) {
     sourceRoots: config.sourceRoots,
   });
   const libraryDir = path.join(vault, config.libraryPath);
-  return { config, inventory, libraryDir, notes: readLibrary(libraryDir) };
+  return {
+    config, inventory, libraryDir,
+    notes: readLibrary(libraryDir, { retiredSubfolder: config.retiredSubfolder }),
+  };
 }
 
 function main(argv) {
@@ -144,6 +162,47 @@ class EmptyInventoryError extends Error {
   }
 }
 
+// CRITICAL 3: an unconfigured library_path defaults to '', and
+// path.join(vault, '') is the vault root -- harmless while every command was
+// read-only, not harmless once apply writes. Two distinct causes, two
+// distinct messages, so a reader knows which one to fix.
+class LibraryPathNotConfiguredError extends Error {
+  constructor() {
+    super('Refusing to write: no library_path is configured '
+      + '(skill_library.library_path in _vault-autopilot-config.md is empty '
+      + 'or missing). Without it the scan target defaults to the vault root. '
+      + 'Configure library_path before running apply --write.');
+    this.name = 'LibraryPathNotConfiguredError';
+  }
+}
+
+class LibraryDirectoryMissingError extends Error {
+  constructor(libraryDir) {
+    super(`Refusing to write: the configured library directory does not exist `
+      + `at ${libraryDir}. Create it (or fix library_path) before running `
+      + 'apply --write.');
+    this.name = 'LibraryDirectoryMissingError';
+  }
+}
+
+// IMPORTANT 1: the shared mass-change ceiling (200) sits above the entire
+// real library (161 notes), so a plan that retires all of them sails
+// through it -- and EmptyInventoryError only covers one of the causes that
+// can produce a mass retirement (zero inventory rows), not the others (a
+// changed library_path, a vanished source root, a manifest that parses to a
+// subset). `retired` is the one bucket that both moves AND rewrites a file,
+// so it gets its own library-relative cap: refuse above 25% of the notes
+// read, with a floor so a tiny library is not blocked by rounding. A real
+// run against the user's 161-note library retires 29 (18%) and must pass.
+class RetireCapError extends Error {
+  constructor(count, cap, totalNotes) {
+    super(`Retire guard: this plan would retire ${count} of ${totalNotes} notes `
+      + `read (> cap ${cap}). Aborting; nothing written. Override with a `
+      + 'higher --retire-max if this is genuinely intentional.');
+    this.name = 'RetireCapError';
+  }
+}
+
 function stamp(date) {
   const p = (n) => String(n).padStart(2, '0');
   return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}`;
@@ -160,6 +219,55 @@ function nowStamp(date) {
 function folderFor(herkunft) {
   return herkunft === 'eigen' ? 'Eigene Skills'
     : herkunft === 'org-plugin' ? 'Org-Plugins' : 'Externe Plugins';
+}
+
+// CRITICAL 2, belt-and-braces half: every title already named in a conflict
+// is untouchable on the write side, not just excluded from diffLibrary's
+// buckets. Covers duplicate-note-title directly; a duplicate-inventory-entry
+// conflict has no note yet, but the title its (still-ambiguous) name would
+// render to is included too, so a later create can never land on it either.
+function conflictedTitleSet(conflicts) {
+  const titles = new Set();
+  for (const c of conflicts) {
+    if (c.kind === 'duplicate-note-title') titles.add(c.detail.title);
+    if (c.kind === 'duplicate-inventory-entry') titles.add(noteTitle({ name: c.detail.name, suffix: '' }));
+  }
+  return titles;
+}
+
+// CRITICAL 2, primary half: a `created` entry's target is computed from
+// folder + title with no existence check, so it can silently land on a file
+// that already sits there for an unrelated reason (here: one half of a
+// duplicate-note-title pair, holding the user's own prose). `allowedFrom`
+// lets a rename target its own current path without tripping this (a no-op
+// move), which is not the collision this guards against.
+function targetOccupied(target, allowedFrom) {
+  if (!fs.existsSync(target)) return false;
+  if (allowedFrom && path.resolve(target) === path.resolve(allowedFrom)) return false;
+  return true;
+}
+
+// M1 + M2: the retire path used to regex-edit the WHOLE raw file, which is
+// the one code path that did not respect the body boundary library.js
+// exists to enforce -- a user whose own prose happened to contain a line
+// starting with "status: " or "last_modified: " would have that line
+// silently mangled too. Fixed by using parseNote to find exactly where the
+// frontmatter block ends (everything from there on -- machineBody, the
+// Notizen heading, and notesZone -- is carried through completely
+// untouched) and editing only the frontmatter text before that point. M2:
+// the inserted entfallen_am line now matches the file's OWN line ending
+// instead of always inserting a bare "\n".
+function retireBody(raw, now) {
+  const parsed = parseNote(raw);
+  const restLength = parsed.machineBody.length
+    + (parsed.hasNotesHeading ? NOTES_HEADING.length + parsed.notesZone.length : 0);
+  const frontmatterText = raw.slice(0, raw.length - restLength);
+  const rest = raw.slice(raw.length - restLength);
+  const eol = raw.includes('\r\n') ? '\r\n' : '\n';
+  const newFrontmatter = frontmatterText
+    .replace(/^status: .*$/m, 'status: entfallen')
+    .replace(/^(last_modified: .*)$/m, `$1${eol}entfallen_am: ${stamp(now)}`);
+  return newFrontmatter + rest;
 }
 
 // Forward reference to Task 8 (index regeneration). Task 8 has not landed
@@ -189,6 +297,26 @@ function applyPlan(vault, options = {}) {
   const { config, libraryDir, notes } = collected;
   const inventory = options.inventory || collected.inventory;
 
+  // CRITICAL 3: a missing/empty library_path degrades harmlessly for
+  // read-only scan/diff (path.join(vault, '') is just the vault root, and
+  // nothing is written), but it is not harmless here. Write mode refuses
+  // outright, naming which of the two causes applies. Preview mode still
+  // runs -- diff/scan already behaved this way -- but says so plainly via
+  // `libraryPathWarning` rather than silently scanning the vault root.
+  let libraryPathWarning = null;
+  if (!config.libraryPath) {
+    libraryPathWarning = 'no library_path is configured -- the scan target defaults to the vault root.';
+  } else {
+    let isDir = false;
+    try { isDir = fs.statSync(libraryDir).isDirectory(); } catch (err) { if (err.code !== 'ENOENT') throw err; }
+    if (!isDir) libraryPathWarning = `the configured library directory does not exist at ${libraryDir}.`;
+  }
+  if (write && libraryPathWarning) {
+    throw config.libraryPath
+      ? new LibraryDirectoryMissingError(libraryDir)
+      : new LibraryPathNotConfiguredError();
+  }
+
   if (inventory.length === 0) throw new EmptyInventoryError();
 
   const plan = diffLibrary(inventory, notes);
@@ -197,14 +325,39 @@ function applyPlan(vault, options = {}) {
     + plan.retired.length + plan.renamed.length;
   if (touched > max) throw new MassChangeError(touched, max);
 
+  // IMPORTANT 1: retired is the one bucket that both moves AND rewrites a
+  // file, and the shared ceiling above does not catch "retire nearly
+  // everything" against a library under 200 notes. Both caps are kept --
+  // they catch different shapes -- and both are overridable.
+  const retireCap = options.retireMax != null ? options.retireMax
+    : Math.max(10, notes.length * 0.25);
+  if (plan.retired.length > retireCap) throw new RetireCapError(plan.retired.length, retireCap, notes.length);
+
+  // CRITICAL 2, belt: any title already named by diffLibrary's own conflict
+  // channel is untouchable here too, not just excluded from the buckets.
+  const conflictedTitles = conflictedTitleSet(plan.conflicts);
+  const conflicts = [...plan.conflicts];
+
   // Plan-then-write: render everything first, so a throw above leaves the
   // library exactly as it was.
   const writes = [];
   for (const entry of plan.created) {
     const folder = folderFor(entry.herkunft);
+    const title = noteTitle(entry);
+    const file = path.join(libraryDir, folder, `${title}.md`);
+    // CRITICAL 2, primary: a create target is a NEW path by construction --
+    // if something already sits there (a stray file, or one half of a
+    // duplicate-note-title pair that diffLibrary excluded from `notes` but
+    // whose file is still on disk), it must never be silently overwritten.
+    // Skip this one create, name it as a conflict, and keep going with
+    // everything else -- a single occupied path must not block the run.
+    if (conflictedTitles.has(title) || targetOccupied(file)) {
+      conflicts.push({ kind: 'target-occupied', detail: { title, path: file } });
+      continue;
+    }
     writes.push({
       kind: 'create',
-      file: path.join(libraryDir, folder, `${noteTitle(entry)}.md`),
+      file,
       body: renderNote({ ...entry, status: entry.herkunft === 'extern' ? 'referenz' : 'aktiv',
         created: nowStamp(now), lastModified: nowStamp(now) }, ''),
     });
@@ -231,8 +384,12 @@ function applyPlan(vault, options = {}) {
   // has already rendered the new body against the OLD path, so the rename moves
   // that same content -- the user's prose and the creation date travel with it.
   // Recreating instead of renaming is the failure this exists to prevent.
-  const renames = plan.renamed.map((r) => {
-    const note = notes.find((n) => n.title === r.from);
+  const renames = [];
+  for (const r of plan.renamed) {
+    // M3: the note object rides on the plan entry already -- no need to
+    // re-find it by title string in `notes` (that string-keyed-lookup
+    // pattern is exactly what produced a Critical earlier in this plan).
+    const note = r.note;
     const entry = plan.relocated.concat(plan.unchanged).find((e) => noteTitle(e) === r.to);
     // A rename is driven by the entry acquiring a suffix (a name gaining a
     // second origin), so its destination folder is the entry's OWN herkunft
@@ -243,23 +400,33 @@ function applyPlan(vault, options = {}) {
     const folder = entry ? folderFor(entry.herkunft)
       : (path.basename(path.dirname(note.file)) === path.basename(libraryDir)
         ? '' : path.basename(path.dirname(note.file)));
-    return {
+    const to = path.join(libraryDir, folder, `${r.to}.md`);
+    // CRITICAL 2, belt (rename side): a rename target is also a path this
+    // note does not currently occupy, so the same occupied-target check
+    // applies -- `allowedFrom` only lets it target ITS OWN current path
+    // (a no-op), never a different note's file.
+    if (conflictedTitles.has(r.to) || targetOccupied(to, note.file)) {
+      conflicts.push({ kind: 'target-occupied', detail: { title: r.to, path: to } });
+      continue;
+    }
+    renames.push({
       from: note.file,
-      to: path.join(libraryDir, folder, `${r.to}.md`),
+      to,
       body: entry ? renderNote({
         ...entry, status: note.frontmatter.status || 'aktiv',
         created: note.frontmatter.created, lastModified: nowStamp(now),
       }, note.replaceable ? '' : note.notesZone)
         : fs.readFileSync(note.file, 'utf8'),
-    };
-  });
+    });
+  }
 
   const moves = plan.retired.map((note) => ({
     from: note.file,
     to: path.join(libraryDir, config.retiredSubfolder, path.basename(note.file)),
-    body: fs.readFileSync(note.file, 'utf8')
-      .replace(/^status: .*$/m, 'status: entfallen')
-      .replace(/^(last_modified: .*)$/m, `$1\nentfallen_am: ${stamp(now)}`),
+    // M1 + M2: routed through parseNote (see retireBody) so only the
+    // frontmatter is edited -- the body boundary is respected even here --
+    // and the inserted line matches the file's own line ending.
+    body: retireBody(fs.readFileSync(note.file, 'utf8'), now),
   }));
 
   if (!write) {
@@ -270,7 +437,8 @@ function applyPlan(vault, options = {}) {
       // CARRIED RULING 2: conflicts ride along even in preview, so a report
       // (or a human reading the preview) can name every note that was left
       // untouched on purpose, not just the ones that were acted on.
-      conflicts: plan.conflicts,
+      conflicts,
+      libraryPathWarning,
     };
   }
 
@@ -288,7 +456,11 @@ function applyPlan(vault, options = {}) {
   for (const m of moves) {
     fs.mkdirSync(path.dirname(m.to), { recursive: true });
     fs.writeFileSync(m.to, m.body);
-    fs.rmSync(m.from);
+    // CRITICAL 1 (fix 2 of 2, belt): if source and target ever coincide --
+    // e.g. a retired note somehow re-read as a live one, the failure
+    // readLibrary's retiredSubfolder exclusion (fix 1 of 2) already
+    // prevents -- never remove the file out from under its own rewrite.
+    if (path.resolve(m.from) !== path.resolve(m.to)) fs.rmSync(m.from);
   }
   // An index regenerated only when somebody calls the function by hand is the
   // drift this skill exists to end. Wired here; the findings ledger below it.
@@ -305,7 +477,7 @@ function applyPlan(vault, options = {}) {
     // (diffLibrary never puts a conflicted note/entry into created,
     // relocated, retired, renamed, or unchanged), but they still need to be
     // NAMED on the result so a report can say what was left alone and why.
-    conflicts: plan.conflicts,
+    conflicts,
   };
   writeFindings(vault, result, { now });
   return result;
@@ -313,7 +485,9 @@ function applyPlan(vault, options = {}) {
 
 module.exports = {
   readLibrary, renderPreview, collect, main,
-  applyPlan, MassChangeError, EmptyInventoryError, rebuildIndex, writeFindings,
+  applyPlan, MassChangeError, EmptyInventoryError,
+  LibraryPathNotConfiguredError, LibraryDirectoryMissingError, RetireCapError,
+  rebuildIndex, writeFindings,
 };
 
 if (require.main === module) process.exit(main(process.argv.slice(2)));

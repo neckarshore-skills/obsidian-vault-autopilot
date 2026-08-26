@@ -195,3 +195,186 @@ test('a CRLF-authored note\'s hand-written prose survives the rewrite byte-for-b
   assert.match(after, /ort: "\/new"/, 'machine zone was not rewritten');
   assert.ok(after.endsWith(expectedZone), 'the CRLF prose zone was not byte-identical after the rewrite');
 });
+
+// --- Fix round 1: reviewer-measured Criticals, Importants, Minors ---
+
+// CRITICAL 1: readLibrary must never re-read a note already inside the
+// retired subfolder as a live library note -- otherwise a second run
+// classifies it `retired` again, with a move target identical to its
+// source, and the (pre-fix) move loop's unconditional rmSync deleted it.
+// Reproduces the reviewer's own measurement: run1 retires it, run2 must
+// leave it exactly where run1 put it.
+test('a second consecutive apply leaves every already-retired note in place', () => {
+  const body = renderNote({
+    name: 'gone', suffix: '', description: 'd', herkunft: 'extern', ort: '/gone',
+    plugin: '', status: 'referenz', created: '2026-07-05 15:45', lastModified: '2026-07-05 15:45',
+  }, '');
+  const f = vaultFixture({ notes: [{ title: 'Skill – gone', body }] });
+  const inventory = [{ name: 'keep', herkunft: 'eigen', ort: '/keep', plugin: '', description: 'd' }];
+
+  const run1 = applyPlan(f.vault, { write: true, inventory });
+  const retiredFile = path.join(f.lib, 'Entfallen', 'Skill – gone.md');
+  assert.ok(fs.existsSync(retiredFile), 'run1 must retire the note');
+  const afterRun1 = fs.readFileSync(retiredFile, 'utf8');
+
+  const run2 = applyPlan(f.vault, { write: true, inventory });
+
+  assert.ok(fs.existsSync(retiredFile), 'run2 deleted a note run1 had already retired');
+  assert.strictEqual(fs.readFileSync(retiredFile, 'utf8'), afterRun1, 'run2 must not rewrite an already-retired note');
+  assert.strictEqual(run2.moved.length, 0, 'run2 must not classify the tombstone for retirement again');
+  assert.deepStrictEqual(fs.readdirSync(path.join(f.lib, 'Entfallen')), ['Skill – gone.md']);
+});
+
+// CRITICAL 2: a `created` entry's target is computed from folder + title
+// with no existence check. Two files in different subfolders that both
+// derive the title "Skill – dup" collide as a duplicate-note-title
+// conflict (excluded from `notes`/`cleanNotes`), but an inventory row for
+// the SAME name+herkunft then finds no note and falls into `created` --
+// landing on one of the two conflicted files. Reproduces the reviewer's
+// exact fixture: two same-named notes plus a matching inventory entry.
+test('a created note must never overwrite a conflicted note holding the user\'s prose', () => {
+  const bodyA = renderNote({
+    name: 'dup', suffix: '', description: 'first', herkunft: 'eigen', ort: '/dup-a',
+    plugin: '', status: 'aktiv', created: '2026-07-05 15:45', lastModified: '2026-07-05 15:45',
+  }, '\n\nErste Kopie, meine eigene Notiz.\n');
+  const bodyB = renderNote({
+    name: 'dup', suffix: '', description: 'second', herkunft: 'extern', ort: '/dup-b',
+    plugin: '', status: 'referenz', created: '2026-07-06 09:00', lastModified: '2026-07-06 09:00',
+  }, '\n\nZweite Kopie.\n');
+  const f = vaultFixture();
+  const dirA = path.join(f.lib, 'Eigene Skills');
+  const dirB = path.join(f.lib, 'Externe Plugins');
+  fs.mkdirSync(dirA, { recursive: true });
+  fs.mkdirSync(dirB, { recursive: true });
+  const fileA = path.join(dirA, 'Skill – dup.md');
+  const fileB = path.join(dirB, 'Skill – dup.md');
+  fs.writeFileSync(fileA, bodyA);
+  fs.writeFileSync(fileB, bodyB);
+
+  // The inventory entry that would, absent the guard, be classified
+  // `created` and land its write on fileA's exact path.
+  const result = applyPlan(f.vault, { write: true, inventory: [
+    { name: 'dup', herkunft: 'eigen', ort: '/dup-a', plugin: '', description: 'first' },
+  ] });
+
+  assert.match(fs.readFileSync(fileA, 'utf8'), /Erste Kopie, meine eigene Notiz\./, 'the user\'s prose must survive');
+  assert.strictEqual(result.written.includes(fileA), false, 'nothing may be written to an occupied target');
+  const occupied = result.conflicts.find((c) => c.kind === 'target-occupied');
+  assert.ok(occupied, 'the skipped create must be reported as a conflict');
+  assert.strictEqual(occupied.detail.title, 'Skill – dup');
+  assert.strictEqual(occupied.detail.path, fileA);
+});
+
+// CRITICAL 3: DEFAULTS.libraryPath is '', so path.join(vault, '') is the
+// vault root. Harmless for read-only scan/diff; not harmless once apply
+// writes -- a note outside the library could be moved, and folders created,
+// at the vault root. Write mode must refuse, naming which of the two causes
+// applies; preview mode may still run but must say so plainly.
+test('apply --write refuses when no library_path is configured', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sls-apply-nopath-'));
+  const vault = path.join(root, 'vault');
+  fs.mkdirSync(vault, { recursive: true });
+  // Deliberately no _vault-autopilot-config.md at all -> DEFAULTS.libraryPath === ''.
+  assert.throws(
+    () => applyPlan(vault, { write: true, inventory: [{ name: 'x', herkunft: 'eigen', ort: '/x', plugin: '', description: 'd' }] }),
+    /no library_path is configured/i,
+  );
+});
+
+test('apply --write refuses when the configured library directory does not exist', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sls-apply-missingdir-'));
+  const vault = path.join(root, 'vault');
+  fs.mkdirSync(vault, { recursive: true });
+  fs.writeFileSync(path.join(vault, '_vault-autopilot-config.md'),
+    ['```yaml', 'skill_library:', '  library_path: "Library/Skill Library"', '```'].join('\n'));
+  // The configured path is never created on disk.
+  assert.throws(
+    () => applyPlan(vault, { write: true, inventory: [{ name: 'x', herkunft: 'eigen', ort: '/x', plugin: '', description: 'd' }] }),
+    /does not exist/i,
+  );
+});
+
+test('preview mode still runs with no library_path configured, and says so', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sls-apply-nopath-preview-'));
+  const vault = path.join(root, 'vault');
+  fs.mkdirSync(vault, { recursive: true });
+  const result = applyPlan(vault, { write: false, inventory: [{ name: 'x', herkunft: 'eigen', ort: '/x', plugin: '', description: 'd' }] });
+  assert.match(result.libraryPathWarning || '', /no library_path is configured/i);
+});
+
+// IMPORTANT 1: the shared mass-change ceiling (200) sits above the entire
+// 161-note library, so a plan retiring ALL of them sails through it, and
+// EmptyInventoryError only covers the zero-inventory cause of a mass
+// retirement. `retired` gets its own library-relative cap (25% of notes
+// read, floor 10). A real run against the user's library retires 29 of 161
+// (18%) and must still pass.
+function libraryOf(n, retiredNames) {
+  const f = vaultFixture();
+  const notesToWrite = [];
+  for (let i = 0; i < n; i += 1) {
+    const name = `s${i}`;
+    notesToWrite.push({
+      title: `Skill – ${name}`,
+      body: renderNote({
+        name, suffix: '', description: 'd', herkunft: 'eigen', ort: `/${name}`,
+        plugin: '', status: 'aktiv', created: '2026-07-05 15:45', lastModified: '2026-07-05 15:45',
+      }, ''),
+    });
+  }
+  for (const n2 of notesToWrite) fs.writeFileSync(path.join(f.lib, `${n2.title}.md`), n2.body);
+  const inventory = [];
+  for (let i = 0; i < n; i += 1) {
+    if (retiredNames.has(`s${i}`)) continue; // absent from inventory -> retired
+    inventory.push({ name: `s${i}`, herkunft: 'eigen', ort: `/s${i}`, plugin: '', description: 'd' });
+  }
+  return { f, inventory };
+}
+
+test('retiring 29 of 161 notes (18%) passes the retire-specific cap', () => {
+  const retiredNames = new Set(Array.from({ length: 29 }, (_, i) => `s${i}`));
+  const { f, inventory } = libraryOf(161, retiredNames);
+  const result = applyPlan(f.vault, { write: true, inventory });
+  assert.strictEqual(result.moved.length, 29);
+});
+
+test('retiring 100 of 161 notes refuses the retire-specific cap and writes nothing', () => {
+  const retiredNames = new Set(Array.from({ length: 100 }, (_, i) => `s${i}`));
+  const { f, inventory } = libraryOf(161, retiredNames);
+  assert.throws(() => applyPlan(f.vault, { write: true, inventory }), /Retire guard/);
+  assert.ok(!fs.existsSync(path.join(f.lib, 'Entfallen')), 'nothing may be written on refusal');
+});
+
+// M1 + M2: the retire path must go through the body boundary (parseNote),
+// never a regex over the WHOLE raw file -- a user whose prose happens to
+// contain a line starting with "status: " must not have it mangled. And the
+// inserted entfallen_am line must match the file's OWN line ending, not
+// always a bare LF.
+test('retiring a note never touches the user\'s prose, even when it looks like frontmatter', () => {
+  const zone = '\n\nMeine Notiz:\nstatus: mein eigener Status, kein YAML.\nlast_modified: das hier ist auch nur Text.\n';
+  const body = renderNote({
+    name: 'lookalike', suffix: '', description: 'd', herkunft: 'extern', ort: '/lookalike',
+    plugin: '', status: 'referenz', created: '2026-07-05 15:45', lastModified: '2026-07-05 15:45',
+  }, zone);
+  const f = vaultFixture({ notes: [{ title: 'Skill – lookalike', body }] });
+
+  applyPlan(f.vault, { write: true, inventory: [{ name: 'keep', herkunft: 'eigen', ort: '/keep', plugin: '', description: 'd' }] });
+
+  const after = fs.readFileSync(path.join(f.lib, 'Entfallen', 'Skill – lookalike.md'), 'utf8');
+  assert.match(after, /^status: entfallen$/m, 'the real frontmatter status must still flip');
+  assert.match(after, /Meine Notiz:\nstatus: mein eigener Status, kein YAML\.\nlast_modified: das hier ist auch nur Text\.\n$/,
+    'the user\'s prose lines must survive verbatim, even though they look like frontmatter keys');
+});
+
+test('the inserted entfallen_am line matches a CRLF file\'s own line ending', () => {
+  const body = renderNote({
+    name: 'crlfgone', suffix: '', description: 'd', herkunft: 'extern', ort: '/crlfgone',
+    plugin: '', status: 'referenz', created: '2026-07-05 15:45', lastModified: '2026-07-05 15:45',
+  }, '\n\nEigener Text.\n').replace(/\n/g, '\r\n');
+  const f = vaultFixture({ notes: [{ title: 'Skill – crlfgone', body }] });
+
+  applyPlan(f.vault, { write: true, inventory: [{ name: 'keep', herkunft: 'eigen', ort: '/keep', plugin: '', description: 'd' }] });
+
+  const after = fs.readFileSync(path.join(f.lib, 'Entfallen', 'Skill – crlfgone.md'), 'utf8');
+  assert.match(after, /last_modified: 2026-07-05 15:45\r\nentfallen_am: \d{4}-\d{2}-\d{2}\r\n/,
+    'entfallen_am must be CRLF-joined in a CRLF file, not a bare LF');
+});

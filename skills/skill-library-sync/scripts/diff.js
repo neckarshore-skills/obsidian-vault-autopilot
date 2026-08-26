@@ -172,7 +172,11 @@ function diffLibrary(inventory, notes) {
     if (!note && renameClaimByEntry.has(entry)) {
       const bare = renameClaimByEntry.get(entry);
       if (!claimed.has(bare)) {
-        renamed.push({ from: bare.title, to: noteTitle(entry) });
+        // `note` carries the object through for consumers that act on the
+        // rename (the write path): a second string-keyed lookup by title
+        // is exactly the pattern that already produced a Critical earlier
+        // in this plan, and it is needless when the object is right here.
+        renamed.push({ from: bare.title, to: noteTitle(entry), note: bare });
         claimed.add(bare);
         note = bare;
       }
