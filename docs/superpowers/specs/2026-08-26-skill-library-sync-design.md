@@ -91,9 +91,15 @@ not chosen.
 
 ### 3. Writes preserve birthtime
 
-A write resets the APFS creation date. Capture `st_birthtime` before, restore with
-`touch -t`, then `os.utime` for the modification time — the pattern proven on this
-vault on 2026-06-20. Verify that no touched note ends up created "today".
+A note that loses its creation date loses the only record of when it entered the
+vault. **Corrected during planning against the repo's own code:** `tag-manage`
+already solves this more simply than the capture-and-restore pattern this spec
+originally proposed — an in-place `fs.writeFileSync` on an existing path creates no
+new inode, so APFS birthtime survives untouched. No `touch -t`, no restore step, no
+window in which the value is wrong.
+
+The consequence is a rule: **never write-to-temp-then-rename for an existing note.**
+A test reads `birthtimeMs` before and after a rewrite and asserts equality.
 
 ### 4. Nothing is deleted
 
@@ -179,6 +185,7 @@ Fixture-based, no live vault:
 3. A `relocated` note keeps its `created` value and its birthtime.
 4. A `retired` note moves, flips status, and its content survives.
 5. A skill acquiring a second origin renames the note and updates the index wikilink.
-6. The scanner refuses a source root not named in the config.
+6. The scanner reaches exactly one level into a `skills/` directory: a skill
+   buried deeper is NOT found, which is the fence of contract 2 as an assertion.
 7. An index regenerated from N notes has N rows numbered 1..N with no gaps.
 8. A run with no differences reports `unchanged: N` rather than empty output.
