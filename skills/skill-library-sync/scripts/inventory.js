@@ -28,8 +28,11 @@ function skillsIn(skillsDir) {
   let entries = [];
   try {
     entries = fs.readdirSync(skillsDir, { withFileTypes: true });
-  } catch {
-    return [];
+  } catch (err) {
+    if (err.code === 'ENOENT') {
+      return [];
+    }
+    throw new Error(`skills directory is not readable at ${skillsDir}: ${err.message}`);
   }
   return entries
     .filter((e) => e.isDirectory())

@@ -118,3 +118,17 @@ test('readSkillDescription returns empty string for missing SKILL.md', () => {
   const { readSkillDescription } = require('../scripts/inventory.js');
   assert.strictEqual(readSkillDescription(skillDir), '');
 });
+
+test('a skills directory that is not readable (e.g., is a file) throws with the directory path', () => {
+  const f = fixture();
+  const unreadableSkillsPath = path.join(f.root, 'bad-plugin', 'skills');
+  fs.mkdirSync(path.dirname(unreadableSkillsPath), { recursive: true });
+  fs.writeFileSync(unreadableSkillsPath, 'this is a file, not a directory');
+  fs.writeFileSync(f.installed, JSON.stringify({
+    plugins: { 'bad@plugin': [{ installPath: path.dirname(unreadableSkillsPath), version: '1.0.0' }] },
+  }));
+  assert.throws(
+    () => buildInventory({ ownSkillsDir: f.own, installedPluginsPath: f.installed, sourceRoots: [] }),
+    (err) => err.message.includes(unreadableSkillsPath),
+  );
+});
