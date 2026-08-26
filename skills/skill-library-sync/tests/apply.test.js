@@ -378,3 +378,154 @@ test('the inserted entfallen_am line matches a CRLF file\'s own line ending', ()
   assert.match(after, /last_modified: 2026-07-05 15:45\r\nentfallen_am: \d{4}-\d{2}-\d{2}\r\n/,
     'entfallen_am must be CRLF-joined in a CRLF file, not a bare LF');
 });
+
+// --- Fix round 2: reviewer-measured findings ---
+
+// N1: the moves loop is the only write path with no occupancy check, and it
+// is the one loop that both writes AND deletes. Reproduces the reviewer's
+// exact three-run cycle: run 1 retires a note carrying the user's prose;
+// run 2 the skill returns and a fresh stub is created back in the live
+// folder; run 3 it retires again -- landing on the SAME tombstone path run 1
+// already used. The prose must survive run 3, and the stub must stay
+// exactly where it is (not silently deleted, not silently overwritten).
+test('a note retiring for a second time onto an existing tombstone is refused, not overwritten', () => {
+  const originalBody = renderNote({
+    name: 'flappy', suffix: '', description: 'd', herkunft: 'eigen', ort: '/flappy',
+    plugin: '', status: 'aktiv', created: '2026-07-01 09:00', lastModified: '2026-07-01 09:00',
+  }, '\n\nEigene Notizen zu flappy, die niemals verloren gehen duerfen.\n');
+  const f = vaultFixture({ notes: [{ title: 'Skill – flappy', body: originalBody }] });
+  const tombstone = path.join(f.lib, 'Entfallen', 'Skill – flappy.md');
+  const keepOnly = [{ name: 'keep', herkunft: 'eigen', ort: '/keep', plugin: '', description: 'd' }];
+  const withFlappy = [
+    { name: 'keep', herkunft: 'eigen', ort: '/keep', plugin: '', description: 'd' },
+    { name: 'flappy', herkunft: 'eigen', ort: '/flappy-2', plugin: '', description: 'd' },
+  ];
+
+  // Run 1: flappy leaves -> retired, prose preserved in the tombstone.
+  applyPlan(f.vault, { write: true, inventory: keepOnly });
+  assert.ok(fs.existsSync(tombstone), 'run 1 must retire flappy');
+  const tombstoneAfterRun1 = fs.readFileSync(tombstone, 'utf8');
+  assert.match(tombstoneAfterRun1, /Eigene Notizen zu flappy/);
+
+  // Run 2: flappy returns -> a fresh stub is created back in the live folder
+  // (readLibrary excludes the retired subfolder, so nothing there is seen).
+  applyPlan(f.vault, { write: true, inventory: withFlappy });
+  const revivedStub = path.join(f.lib, 'Eigene Skills', 'Skill – flappy.md');
+  assert.ok(fs.existsSync(revivedStub), 'run 2 must create a fresh stub for the returning skill');
+  assert.strictEqual(fs.readFileSync(tombstone, 'utf8'), tombstoneAfterRun1, 'run 2 must not touch the existing tombstone');
+
+  // Run 3: flappy leaves again -> would retire the stub onto the SAME
+  // tombstone path. Must be refused, not overwritten.
+  const result = applyPlan(f.vault, { write: true, inventory: keepOnly });
+
+  assert.strictEqual(fs.readFileSync(tombstone, 'utf8'), tombstoneAfterRun1,
+    'the original tombstone (and its prose) must survive run 3 untouched');
+  assert.ok(fs.existsSync(revivedStub), 'the stub must stay exactly where it was, not be silently deleted');
+  const occupied = result.conflicts.find((c) => c.kind === 'target-occupied');
+  assert.ok(occupied, 'the refused retirement must be reported as a conflict');
+  assert.strictEqual(occupied.detail.path, tombstone);
+  assert.strictEqual(occupied.detail.from, revivedStub);
+  assert.strictEqual(result.moved.includes(tombstone), false);
+});
+
+// N2: a duplicate-inventory-entry conflict must not block the SURVIVING
+// valid row for the same name. splitInventoryConflicts removes the
+// ambiguous rows before multiOriginNames runs, so a lone valid row for that
+// name legitimately becomes single-origin (suffix '') and renders to the
+// bare title -- blocking that title as "conflicted" dropped a legitimate
+// create on every run and reported a target-occupied conflict for a path
+// that never existed. Reproduces the reviewer's exact inventory.
+test('a legitimate create survives a same-name duplicate-inventory-entry conflict', () => {
+  const f = vaultFixture();
+  const result = applyPlan(f.vault, { write: true, inventory: [
+    { name: 'dup', herkunft: 'eigen', ort: '/a', plugin: '', description: 'd' },
+    { name: 'dup', herkunft: 'eigen', ort: '/b', plugin: '', description: 'd' },
+    { name: 'dup', herkunft: 'extern', ort: '/plugin', plugin: 'p@1', description: 'd' },
+  ] });
+
+  const expected = path.join(f.lib, 'Externe Plugins', 'Skill – dup.md');
+  assert.ok(result.written.includes(expected), 'the valid (dup, extern) entry must be created');
+  assert.ok(fs.existsSync(expected));
+  const bogus = result.conflicts.find((c) => c.kind === 'target-occupied');
+  assert.strictEqual(bogus, undefined, 'no target-occupied conflict may be reported for a path that was never occupied');
+  const invConflict = result.conflicts.find((c) => c.kind === 'duplicate-inventory-entry');
+  assert.ok(invConflict, 'the two ambiguous eigen rows must still be reported as a duplicate-inventory-entry conflict');
+});
+
+// N3: readLibrary only requires the FILENAME to match, so a note with no
+// frontmatter at all -- or one missing last_modified -- is still readable.
+// Moving such a note produced no status/entfallen_am stamp and nothing
+// reported it. A note that cannot be correctly stamped must not be moved.
+test('a note with no frontmatter at all is not retired, and is reported as unstampable', () => {
+  const f = vaultFixture({ notes: [{
+    title: 'Skill – nofrontmatter',
+    body: `# Skill – nofrontmatter\n\n${'## Notizen'}\n\nEigener Text ohne Frontmatter.\n`,
+  }] });
+  const original = fs.readFileSync(path.join(f.lib, 'Skill – nofrontmatter.md'), 'utf8');
+
+  const result = applyPlan(f.vault, { write: true, inventory: [{ name: 'keep', herkunft: 'eigen', ort: '/keep', plugin: '', description: 'd' }] });
+
+  assert.ok(fs.existsSync(path.join(f.lib, 'Skill – nofrontmatter.md')), 'the note must stay in the live folder');
+  assert.strictEqual(fs.readFileSync(path.join(f.lib, 'Skill – nofrontmatter.md'), 'utf8'), original);
+  assert.ok(!fs.existsSync(path.join(f.lib, 'Entfallen', 'Skill – nofrontmatter.md')));
+  const unstampable = result.conflicts.find((c) => c.kind === 'unstampable-note');
+  assert.ok(unstampable, 'the skipped retirement must be reported');
+  assert.strictEqual(unstampable.detail.missing, 'status');
+});
+
+test('a note missing last_modified is not retired, and names the missing field', () => {
+  const body = [
+    '---',
+    'title: "partial"',
+    'type: skill',
+    'description: "d"',
+    'herkunft: eigen',
+    'ort: "/partial"',
+    'plugin: ""',
+    'status: aktiv',
+    'created: 2026-07-05 15:45',
+    'tags:',
+    '  - Claude/ClaudeCode',
+    '---',
+    '',
+    '# Skill – partial',
+    '',
+    '## Notizen',
+    '',
+  ].join('\n');
+  const f = vaultFixture({ notes: [{ title: 'Skill – partial', body }] });
+
+  const result = applyPlan(f.vault, { write: true, inventory: [{ name: 'keep', herkunft: 'eigen', ort: '/keep', plugin: '', description: 'd' }] });
+
+  assert.ok(fs.existsSync(path.join(f.lib, 'Skill – partial.md')), 'the note must stay in the live folder');
+  assert.ok(!fs.existsSync(path.join(f.lib, 'Entfallen', 'Skill – partial.md')));
+  const unstampable = result.conflicts.find((c) => c.kind === 'unstampable-note');
+  assert.ok(unstampable);
+  assert.strictEqual(unstampable.detail.missing, 'last_modified');
+});
+
+// Small fix: retireCap must be an integer both in the comparison and in the
+// user-facing message -- the number read must be the number applied.
+test('the retire-cap refusal message reports an integer, not a fraction', () => {
+  const retiredNames = new Set(Array.from({ length: 100 }, (_, i) => `s${i}`));
+  const f = vaultFixture();
+  for (let i = 0; i < 161; i += 1) {
+    const name = `s${i}`;
+    fs.writeFileSync(path.join(f.lib, `Skill – ${name}.md`), renderNote({
+      name, suffix: '', description: 'd', herkunft: 'eigen', ort: `/${name}`,
+      plugin: '', status: 'aktiv', created: '2026-07-05 15:45', lastModified: '2026-07-05 15:45',
+    }, ''));
+  }
+  const inventory = [];
+  for (let i = 0; i < 161; i += 1) {
+    if (retiredNames.has(`s${i}`)) continue;
+    inventory.push({ name: `s${i}`, herkunft: 'eigen', ort: `/s${i}`, plugin: '', description: 'd' });
+  }
+  try {
+    applyPlan(f.vault, { write: true, inventory });
+    assert.fail('expected a RetireCapError');
+  } catch (err) {
+    assert.match(err.message, /cap 40\b/, 'the reported cap must be floored (40, not 40.25)');
+    assert.doesNotMatch(err.message, /40\.25/);
+  }
+});

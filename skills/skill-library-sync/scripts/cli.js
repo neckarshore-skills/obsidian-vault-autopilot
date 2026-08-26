@@ -221,16 +221,26 @@ function folderFor(herkunft) {
     : herkunft === 'org-plugin' ? 'Org-Plugins' : 'Externe Plugins';
 }
 
-// CRITICAL 2, belt-and-braces half: every title already named in a conflict
-// is untouchable on the write side, not just excluded from diffLibrary's
-// buckets. Covers duplicate-note-title directly; a duplicate-inventory-entry
-// conflict has no note yet, but the title its (still-ambiguous) name would
-// render to is included too, so a later create can never land on it either.
+// CRITICAL 2, belt-and-braces half: every title already named by a
+// duplicate-note-title conflict is untouchable on the write side, not just
+// excluded from diffLibrary's buckets.
+//
+// N2 fix: a duplicate-inventory-entry conflict must NOT contribute a title
+// here. splitInventoryConflicts already removes the ambiguous rows before
+// multiOriginNames runs, so a surviving valid row for that same name can
+// legitimately render to the bare title (e.g. inventory
+// [(dup,eigen,/a), (dup,eigen,/b), (dup,extern,/plugin)]: the two eigen rows
+// conflict and are removed, leaving (dup,extern) as the ONLY row for that
+// name -- single-origin, so it gets suffix '' and title "Skill – dup").
+// Blocking that title as "conflicted" dropped a legitimate create on every
+// run, and the reported target-occupied conflict named a path that does not
+// exist -- a wrong reason is worse than no report. duplicate-inventory-entry
+// conflicts are already fully handled at the classifier level; no write-side
+// block is needed or wanted for them.
 function conflictedTitleSet(conflicts) {
   const titles = new Set();
   for (const c of conflicts) {
     if (c.kind === 'duplicate-note-title') titles.add(c.detail.title);
-    if (c.kind === 'duplicate-inventory-entry') titles.add(noteTitle({ name: c.detail.name, suffix: '' }));
   }
   return titles;
 }
@@ -257,17 +267,27 @@ function targetOccupied(target, allowedFrom) {
 // untouched) and editing only the frontmatter text before that point. M2:
 // the inserted entfallen_am line now matches the file's OWN line ending
 // instead of always inserting a bare "\n".
+//
+// N3: readLibrary only requires the FILENAME to match -- a note with no
+// frontmatter block at all, or one missing `last_modified:`, is still
+// readable. Silently moving such a note produced no `status: entfallen` (or
+// no `entfallen_am`) and nothing reported it -- a half-labelled tombstone
+// with no trace of why. Returns `{ ok: false, missing }` instead of a body
+// when the note cannot be correctly stamped, so the caller can refuse to
+// move it and report exactly which field was missing.
 function retireBody(raw, now) {
   const parsed = parseNote(raw);
   const restLength = parsed.machineBody.length
     + (parsed.hasNotesHeading ? NOTES_HEADING.length + parsed.notesZone.length : 0);
   const frontmatterText = raw.slice(0, raw.length - restLength);
   const rest = raw.slice(raw.length - restLength);
+  if (!/^status: .*$/m.test(frontmatterText)) return { ok: false, missing: 'status' };
+  if (!/^last_modified: .*$/m.test(frontmatterText)) return { ok: false, missing: 'last_modified' };
   const eol = raw.includes('\r\n') ? '\r\n' : '\n';
   const newFrontmatter = frontmatterText
     .replace(/^status: .*$/m, 'status: entfallen')
     .replace(/^(last_modified: .*)$/m, `$1${eol}entfallen_am: ${stamp(now)}`);
-  return newFrontmatter + rest;
+  return { ok: true, body: newFrontmatter + rest };
 }
 
 // Forward reference to Task 8 (index regeneration). Task 8 has not landed
@@ -328,9 +348,12 @@ function applyPlan(vault, options = {}) {
   // IMPORTANT 1: retired is the one bucket that both moves AND rewrites a
   // file, and the shared ceiling above does not catch "retire nearly
   // everything" against a library under 200 notes. Both caps are kept --
-  // they catch different shapes -- and both are overridable.
-  const retireCap = options.retireMax != null ? options.retireMax
-    : Math.max(10, notes.length * 0.25);
+  // they catch different shapes -- and both are overridable. Floored: the
+  // 25%-of-notes-read formula can land on a fraction (e.g. 40.25 for a
+  // 161-note library), and the number a user reads in the refusal message
+  // must be the number that was actually applied as the comparison.
+  const retireCap = Math.floor(options.retireMax != null ? options.retireMax
+    : Math.max(10, notes.length * 0.25));
   if (plan.retired.length > retireCap) throw new RetireCapError(plan.retired.length, retireCap, notes.length);
 
   // CRITICAL 2, belt: any title already named by diffLibrary's own conflict
@@ -420,14 +443,39 @@ function applyPlan(vault, options = {}) {
     });
   }
 
-  const moves = plan.retired.map((note) => ({
-    from: note.file,
-    to: path.join(libraryDir, config.retiredSubfolder, path.basename(note.file)),
-    // M1 + M2: routed through parseNote (see retireBody) so only the
-    // frontmatter is edited -- the body boundary is respected even here --
-    // and the inserted line matches the file's own line ending.
-    body: retireBody(fs.readFileSync(note.file, 'utf8'), now),
-  }));
+  // N1: this is the one loop that both WRITES and DELETES, and round 1 gave
+  // occupancy checks to create and rename but not here. Two ways this
+  // collides in practice: (a) a stale tombstone already sits at the target
+  // -- the exact scenario a note that leaves, returns, and leaves again
+  // produces (run 1 retires it; run 2 the skill returns and a fresh stub is
+  // created back in the live folder; run 3 it retires again, landing on the
+  // SAME basename in the retired folder); (b) two notes with the same
+  // basename in different live subfolders are retired in the same run, so
+  // they target the identical tombstone path. Either way: refuse that one
+  // move, report it, and do not touch either file -- inventing a
+  // disambiguated filename would just be a second thing to discover later.
+  const claimedMoveTargets = new Map(); // resolved target path -> source path, this run only
+  const moves = [];
+  for (const note of plan.retired) {
+    const raw = fs.readFileSync(note.file, 'utf8');
+    // N3: a note readable by filename alone can still lack the frontmatter
+    // fields the tombstone stamp needs. Moving it anyway would produce a
+    // half-labelled file with nothing reporting why -- refuse the move and
+    // name exactly which field was missing instead.
+    const stamped = retireBody(raw, now);
+    if (!stamped.ok) {
+      conflicts.push({ kind: 'unstampable-note', detail: { path: note.file, missing: stamped.missing } });
+      continue;
+    }
+    const to = path.join(libraryDir, config.retiredSubfolder, path.basename(note.file));
+    const resolvedTo = path.resolve(to);
+    if (targetOccupied(to, note.file) || claimedMoveTargets.has(resolvedTo)) {
+      conflicts.push({ kind: 'target-occupied', detail: { title: note.title, path: to, from: note.file } });
+      continue;
+    }
+    claimedMoveTargets.set(resolvedTo, note.file);
+    moves.push({ from: note.file, to, body: stamped.body });
+  }
 
   if (!write) {
     return {
