@@ -117,3 +117,68 @@ test('rebuildIndex does not list notes from the retired subfolder', () => {
   assert.ok(!md.includes('Skill – gone'), 'a tombstone was listed in the live index');
   assert.ok(md.includes('Skill – a'));
 });
+
+// --- Fix round 1 coverage (controller ruling on C1, I1, I2) ---
+
+test('a non-standard H1 is preserved verbatim, including a suffix like "— Index"', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sls-idx-h1-'));
+  fs.writeFileSync(path.join(dir, `Skill – a.md`), renderNote({
+    name: 'a', suffix: '', description: 'd', herkunft: 'eigen', ort: '/a',
+    plugin: '', status: 'aktiv', created: '2026-08-26 17:00', lastModified: '2026-08-26 17:00',
+  }, ''));
+  fs.writeFileSync(path.join(dir, '_Skill Library.md'),
+    ['---', 'title: Skill Library — Index', '---', '', '# Skill Library — Index', '',
+     '## Skills', '', '| # | old |', '|---|---|', '| 1 | stale |', ''].join('\n'));
+
+  rebuildIndex(dir, { write: true });
+  const text = fs.readFileSync(path.join(dir, '_Skill Library.md'), 'utf8');
+  assert.ok(text.includes('# Skill Library — Index'), 'the H1 suffix was truncated');
+});
+
+test('an existing index note with no H1 at all throws rather than silently replacing its frontmatter', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sls-idx-noh1-'));
+  fs.writeFileSync(path.join(dir, '_Skill Library.md'),
+    ['---', 'title: Skill Library — Index', 'tags:', '  - x', '---', '', 'no heading here at all', ''].join('\n'));
+  assert.throws(() => rebuildIndex(dir, { write: false }), /H1 heading/);
+});
+
+test('a hand-written intro paragraph with wikilinks between the H1 and the first ## survives a rebuild byte-for-byte', () => {
+  const dir = libraryFixture([['a', 'eigen', 'aktiv']]);
+  const intro = 'Reine Datentabelle: Erklärung, Herkunfts-Legende und Quick-Start stehen in '
+    + '[[_Overview Skill Library]] -- diese Seite dupliziert das bewusst nicht (R3). Der operative '
+    + 'Ablauf fuer neue Fremd-Skills steht in [[_Skill Kandidaten Workflow]].';
+  fs.writeFileSync(path.join(dir, '_Skill Library.md'),
+    ['---', 'title: Skill Library — Index', '---', '', '# Skill Library', '',
+     intro, '',
+     '## Bestandsaufnahme (2026-07-05)', '', '158 Skills gefunden ueber 4 Quellen.', '',
+     '## Skills', '', '| # | old |', '|---|---|', '| 1 | stale |', ''].join('\n'));
+
+  rebuildIndex(dir, { write: true });
+  const text = fs.readFileSync(path.join(dir, '_Skill Library.md'), 'utf8');
+  assert.ok(text.includes(intro), 'the hand-written intro paragraph and its wikilinks did not survive');
+  assert.ok(text.includes('[[_Overview Skill Library]]'), 'a backlink-bearing wikilink was lost');
+  assert.ok(!text.includes('Bestandsaufnahme'), 'the stale block (a ## section) survived, but should not have');
+  assert.ok(!text.includes('158'), 'the stale count survived');
+});
+
+test('a rebuild that would write zero rows over an index that currently has rows is refused', () => {
+  const dir = libraryFixture([['a', 'eigen', 'aktiv']]);
+  // Delete the only note so the library has zero live notes, leaving an
+  // index on disk that still holds a row -- this is the data-loss shape,
+  // not a legitimate first run.
+  fs.unlinkSync(path.join(dir, 'Skill – a.md'));
+  assert.throws(() => rebuildIndex(dir, { write: true }), /would write 0 rows over an index holding/);
+  // Refusal must not have written -- the stale-but-real content survives.
+  const text = fs.readFileSync(path.join(dir, '_Skill Library.md'), 'utf8');
+  assert.ok(text.includes('158'), 'the refusal wrote anyway');
+});
+
+test('a rebuild with zero rows against an index that ALSO has zero rows still writes (a legitimate first run)', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sls-idx-empty-'));
+  fs.writeFileSync(path.join(dir, '_Skill Library.md'),
+    ['---', 'title: Skill Library — Index', '---', '', '# Skill Library', ''].join('\n'));
+  const md = rebuildIndex(dir, { write: true });
+  assert.ok(md.includes('## Legende'), 'a legitimate empty first run was refused');
+  const text = fs.readFileSync(path.join(dir, '_Skill Library.md'), 'utf8');
+  assert.ok(text.includes('## Legende'));
+});

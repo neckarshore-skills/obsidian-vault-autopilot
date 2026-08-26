@@ -301,28 +301,65 @@ const DEFAULT_INDEX_HEADER = [
   INDEX_HEADING,
 ].join('\n');
 
-// Everything above (and including) `# Skill Library` is machine-preserved
-// verbatim -- frontmatter and the heading itself. Everything below it is
-// regenerated on every rebuild; a hand-written paragraph there (like the
-// "Bestandsaufnahme (2026-07-05)" block this replaces) would otherwise go
-// stale the moment the sync runs again.
-function readIndexHeader(indexPath) {
+// The H1 line is matched anywhere on its own line, not by the literal
+// "# Skill Library" text -- a user who renames their own note's heading in
+// Obsidian (e.g. "# Skill-Bibliothek") is doing something normal, and a
+// literal-string match would silently discard the whole file below it (fix
+// for the "# Skill Library — Index" truncation bug: an unanchored
+// indexOf/literal match would slice mid-line and drop the "— Index" suffix).
+const H1_RE = /^# .+$/m;
+
+// Splits an existing index note into three parts, controller ruling
+// (fix round 1, C1 + I1):
+//   - header: everything up to and including the H1 line, verbatim.
+//   - intro: everything between the H1 line and the FIRST `## ` heading,
+//     verbatim -- this is the user's own hand-written intro zone (prose,
+//     wikilinks). The brief's "replace everything below the heading" was a
+//     over-generalisation of one named deletion (the stale
+//     "Bestandsaufnahme (2026-07-05)" block, itself a `## ` section) and is
+//     corrected here: only content from the first `## ` heading onward is
+//     regenerated.
+//   - existingRowCount: how many numbered table rows the file held before
+//     this rebuild, used by the zero-row refusal below.
+//
+// A MISSING file is a valid empty state (same split Task 3 settled for
+// notes): it gets the default header, an empty intro, and existingRowCount
+// 0. An EXISTING file with no H1 at all is not a state, it's malformed --
+// this throws rather than silently replacing its frontmatter with the
+// two-key default (C1: fail closed, loudly, instead of destroying user data).
+function readIndexParts(indexPath) {
   let text;
   try {
     text = fs.readFileSync(indexPath, 'utf8');
   } catch (err) {
-    if (err.code === 'ENOENT') return DEFAULT_INDEX_HEADER;
+    if (err.code === 'ENOENT') return { header: DEFAULT_INDEX_HEADER, intro: '\n\n', existingRowCount: 0 };
     throw err;
   }
-  const idx = text.indexOf(INDEX_HEADING);
-  return idx === -1 ? DEFAULT_INDEX_HEADER : text.slice(0, idx + INDEX_HEADING.length);
+  const h1 = H1_RE.exec(text);
+  if (!h1) {
+    throw new Error(`index note at ${indexPath} has no H1 heading (expected a line matching /^# .+$/m) -- refusing to guess a replacement rather than silently discarding its frontmatter`);
+  }
+  const header = text.slice(0, h1.index + h1[0].length);
+  const rest = text.slice(h1.index + h1[0].length);
+  const h2 = /^## /m.exec(rest);
+  const intro = h2 ? rest.slice(0, h2.index) : rest;
+  const existingRowCount = (text.match(/^\| \d+ \|/gm) || []).length;
+  return { header, intro, existingRowCount };
 }
 
 // Regenerates the index note: reads the live notes (tombstones excluded, same
 // as readLibrary elsewhere), groups them via renderIndex, and replaces
-// everything below the `# Skill Library` heading. Honours { write: false } by
-// returning the computed markdown without touching disk, exactly like the
-// rest of this module's plan-then-write shape.
+// everything from the first `## ` heading onward, preserving the frontmatter,
+// the H1 and the user's intro zone verbatim (see readIndexParts). Honours
+// { write: false } by returning the computed markdown without touching disk,
+// exactly like the rest of this module's plan-then-write shape.
+//
+// Controller ruling (fix round 1, I2): refuses to write when the computed
+// render has ZERO rows but the file on disk currently HAS rows -- that
+// combination is never a legitimate sync outcome (a mis-resolved
+// library_path, a broken TITLE_RE match, an accidentally-emptied library),
+// it is data loss. Zero-against-zero still writes: a first-ever run with no
+// notes yet has nothing to lose.
 function rebuildIndex(libraryDir, options = {}) {
   const notes = readLibrary(libraryDir, { retiredSubfolder: options.retiredSubfolder });
   const rows = notes.map((n) => {
@@ -334,10 +371,13 @@ function rebuildIndex(libraryDir, options = {}) {
       hint: plugin || n.frontmatter.ort || '',
     };
   });
-  const body = renderIndex(rows);
   const indexPath = path.join(libraryDir, INDEX_FILE_NAME);
-  const header = readIndexHeader(indexPath);
-  const full = `${header}\n\n${body}\n`;
+  const { header, intro, existingRowCount } = readIndexParts(indexPath);
+  if (rows.length === 0 && existingRowCount > 0) {
+    throw new Error(`rebuildIndex would write 0 rows over an index holding ${existingRowCount} -- refusing`);
+  }
+  const body = renderIndex(rows);
+  const full = `${header}${intro}${body}\n`;
   if (options.write) fs.writeFileSync(indexPath, full);
   return full;
 }
