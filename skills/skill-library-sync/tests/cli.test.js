@@ -84,3 +84,24 @@ test('readLibrary reads a CRLF note\'s ort', () => {
   assert.strictEqual(notes.length, 1);
   assert.strictEqual(notes[0].frontmatter.ort, '/a');
 });
+
+// Fix-round-1, Important: a missing library directory is a legitimate
+// state (the config may point at a folder that does not exist yet), so it
+// must degrade to an empty note list like every other reader in this
+// skill -- not throw a raw stack trace out of a read-only command.
+test('readLibrary on a missing directory returns an empty list, not a throw', () => {
+  const missing = path.join(os.tmpdir(), 'sls-lib-does-not-exist-' + Date.now());
+  assert.doesNotThrow(() => readLibrary(missing));
+  assert.deepStrictEqual(readLibrary(missing), []);
+});
+
+// Companion: any OTHER filesystem error (here: the "directory" is actually
+// a file, so readdirSync fails with ENOTDIR, not ENOENT) must still throw,
+// naming the directory, per the readLibrary/skillsIn/loadConfig convention
+// of ENOENT-only silence.
+test('readLibrary throws (naming the path) when the library path is not a directory', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sls-lib-notdir-'));
+  const notADir = path.join(dir, 'not-a-directory');
+  fs.writeFileSync(notADir, 'x');
+  assert.throws(() => readLibrary(notADir), (err) => err.message.includes(notADir));
+});

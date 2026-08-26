@@ -12,20 +12,23 @@ const NOTES_HEADING = '## Notizen';
 const STUB = '(noch keine vertiefende Dokumentation — Stub aus der Bestandsaufnahme 2026-07-05)';
 
 function parseNote(text) {
-  // Normalise line endings for parsing purposes only. A note authored with
-  // CRLF (Windows) line endings must still yield its frontmatter -- the
-  // regexes below assume '\n', and without this normalisation a CRLF file
-  // parses as having NO frontmatter, which downstream reads as a missing
-  // `ort` and marks the note for rewrite on every single run, forever.
-  // This never touches the caller's file, and beyond making the split
-  // itself work it does not change what notesZone contains.
-  const src = String(text).replace(/\r\n/g, '\n');
-  const fmMatch = src.match(/^---\n([\s\S]*?)\n---\n?/);
+  // Tolerate CRLF (Windows) line endings WITHOUT normalising the source
+  // string itself. A note authored with CRLF must still yield its
+  // frontmatter -- an earlier version of this function normalised `\r\n`
+  // to `\n` into a working copy and then sliced machineBody/notesZone out
+  // of THAT normalised copy, which silently converted the user's own CRLF
+  // text to LF the moment it passed through here -- exactly the region the
+  // body-boundary contract promises never to touch. Instead, the regexes
+  // below accept an optional `\r` before each `\n`, and every returned
+  // slice (machineBody, notesZone) is taken from the ORIGINAL `src`, so a
+  // CRLF file's line endings survive byte-for-byte in what comes back.
+  const src = String(text);
+  const fmMatch = src.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
   const frontmatter = {};
   let rest = src;
   if (fmMatch) {
     rest = src.slice(fmMatch[0].length);
-    for (const line of fmMatch[1].split('\n')) {
+    for (const line of fmMatch[1].split(/\r?\n/)) {
       const kv = line.match(/^([A-Za-z_][A-Za-z0-9_]*): *(.*)$/);
       if (!kv) continue;
       let value = kv[2].trim();

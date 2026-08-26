@@ -19,10 +19,25 @@ const { loadConfig } = require('./config.js');
 
 const TITLE_RE = /^Skill – (.+?)(?: \((eigen|extern|org-plugin|projekt-lokal)\))?$/;
 
+// A missing library directory is a legitimate state -- the config may point
+// at a folder that does not exist yet -- so it degrades to no entries,
+// exactly like inventory.js's skillsIn() and config.js's loadConfig(). Any
+// OTHER error (permissions, not-a-directory, ...) throws, naming the
+// directory, rather than surfacing a bare ENOENT-shaped stack trace from a
+// read-only inspection command.
+function readdirSafe(dir) {
+  try {
+    return fs.readdirSync(dir, { withFileTypes: true });
+  } catch (err) {
+    if (err.code === 'ENOENT') return [];
+    throw new Error(`library directory is not readable at ${dir}: ${err.message}`);
+  }
+}
+
 function readLibrary(libraryDir) {
   const notes = [];
   const walk = (dir) => {
-    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    for (const e of readdirSafe(dir)) {
       const p = path.join(dir, e.name);
       if (e.isDirectory()) { walk(p); continue; }
       if (!e.name.endsWith('.md') || e.name.startsWith('_')) continue;

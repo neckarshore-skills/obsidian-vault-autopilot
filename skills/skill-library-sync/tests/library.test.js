@@ -75,3 +75,37 @@ test('a CRLF-authored note yields its frontmatter', () => {
   assert.strictEqual(parsed.frontmatter.herkunft, 'eigen');
   assert.strictEqual(parsed.hasNotesHeading, true);
 });
+
+// Fix-round-1, Critical: the notesZone belongs to the user and the design
+// promises never to rewrite it -- so for a CRLF-authored note it must come
+// back with ITS OWN \r\n line endings, byte-identical to the zone as it
+// sits in the file, not silently converted to LF by the parser.
+test('a CRLF-authored note keeps CRLF line endings in its notesZone', () => {
+  const lfParsed = parseNote(NOTE);
+  const expectedZone = lfParsed.notesZone.replace(/\n/g, '\r\n');
+  const crlfParsed = parseNote(NOTE.replace(/\n/g, '\r\n'));
+  assert.strictEqual(crlfParsed.notesZone, expectedZone);
+  assert.match(crlfParsed.notesZone, /\r\n/);
+});
+
+// Companion to the above: the fix must not introduce CRLF where the
+// source had none -- an LF note's notesZone stays pure LF.
+test('an LF-authored note keeps LF line endings in its notesZone', () => {
+  const parsed = parseNote(NOTE);
+  assert.doesNotMatch(parsed.notesZone, /\r/);
+});
+
+// A note whose frontmatter block is CRLF but whose body/notes-zone is LF
+// (plausible: a Windows editor touched only the frontmatter, or the file
+// was partially normalised by some other tool). Each region must come back
+// in exactly the line ending it had in the source -- neither region may
+// borrow the other's.
+test('a mixed-ending note keeps each region in its own line ending', () => {
+  const mixed = '---\r\ntitle: mixed\r\nherkunft: eigen\r\n---\n\n'
+    + '# Skill – mixed (eigen)\n\n' + `${NOTES_HEADING}\n\nMixed body, LF only.\n`;
+  const parsed = parseNote(mixed);
+  assert.strictEqual(parsed.frontmatter.title, 'mixed');
+  assert.strictEqual(parsed.frontmatter.herkunft, 'eigen');
+  assert.doesNotMatch(parsed.notesZone, /\r/);
+  assert.match(parsed.notesZone, /Mixed body, LF only\./);
+});
