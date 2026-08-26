@@ -12,7 +12,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { parseNote, isReplaceableZone, NOTES_HEADING } = require('./library.js');
-const { noteTitle, renderNote } = require('./render.js');
+const { noteTitle, renderNote, renderIndex } = require('./render.js');
 const { buildInventory } = require('./inventory.js');
 const { diffLibrary } = require('./diff.js');
 const { loadConfig } = require('./config.js');
@@ -290,13 +290,56 @@ function retireBody(raw, now) {
   return { ok: true, body: newFrontmatter + rest };
 }
 
-// Forward reference to Task 8 (index regeneration). Task 8 has not landed
-// yet in this checkout, but Task 7's write path is specified to call it
-// after every write so the index is never left to drift out of a manual
-// step. This stub keeps that call from throwing; Task 8 replaces the body
-// (and may replace this whole function) without touching the call site.
+const INDEX_FILE_NAME = '_Skill Library.md';
+const INDEX_HEADING = '# Skill Library';
+const DEFAULT_INDEX_HEADER = [
+  '---',
+  'title: "Skill Library — Index"',
+  'type: index',
+  '---',
+  '',
+  INDEX_HEADING,
+].join('\n');
+
+// Everything above (and including) `# Skill Library` is machine-preserved
+// verbatim -- frontmatter and the heading itself. Everything below it is
+// regenerated on every rebuild; a hand-written paragraph there (like the
+// "Bestandsaufnahme (2026-07-05)" block this replaces) would otherwise go
+// stale the moment the sync runs again.
+function readIndexHeader(indexPath) {
+  let text;
+  try {
+    text = fs.readFileSync(indexPath, 'utf8');
+  } catch (err) {
+    if (err.code === 'ENOENT') return DEFAULT_INDEX_HEADER;
+    throw err;
+  }
+  const idx = text.indexOf(INDEX_HEADING);
+  return idx === -1 ? DEFAULT_INDEX_HEADER : text.slice(0, idx + INDEX_HEADING.length);
+}
+
+// Regenerates the index note: reads the live notes (tombstones excluded, same
+// as readLibrary elsewhere), groups them via renderIndex, and replaces
+// everything below the `# Skill Library` heading. Honours { write: false } by
+// returning the computed markdown without touching disk, exactly like the
+// rest of this module's plan-then-write shape.
 function rebuildIndex(libraryDir, options = {}) {
-  return '';
+  const notes = readLibrary(libraryDir, { retiredSubfolder: options.retiredSubfolder });
+  const rows = notes.map((n) => {
+    const plugin = (n.frontmatter.plugin || '').trim();
+    return {
+      title: n.title,
+      herkunft: n.frontmatter.herkunft || '',
+      status: n.frontmatter.status || '',
+      hint: plugin || n.frontmatter.ort || '',
+    };
+  });
+  const body = renderIndex(rows);
+  const indexPath = path.join(libraryDir, INDEX_FILE_NAME);
+  const header = readIndexHeader(indexPath);
+  const full = `${header}\n\n${body}\n`;
+  if (options.write) fs.writeFileSync(indexPath, full);
+  return full;
 }
 
 // Forward reference to Task 9 (the findings ledger). Same situation as
@@ -512,7 +555,7 @@ function applyPlan(vault, options = {}) {
   }
   // An index regenerated only when somebody calls the function by hand is the
   // drift this skill exists to end. Wired here; the findings ledger below it.
-  rebuildIndex(libraryDir, { write: true });
+  rebuildIndex(libraryDir, { write: true, retiredSubfolder: config.retiredSubfolder });
 
   const result = {
     written: writes.map((w) => w.file),

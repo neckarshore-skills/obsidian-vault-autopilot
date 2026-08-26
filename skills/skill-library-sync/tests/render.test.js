@@ -65,9 +65,12 @@ test('noteTitle appends the origin suffix only when given', () => {
 });
 
 test('renderIndex numbers rows 1..N with no gaps and sorts A to Z', () => {
+  // Same origin/status, so grouping does not reorder these -- this test
+  // isolates the numbering + A-Z-sort behaviour; group ordering itself is
+  // covered by tests/index.test.js.
   const md = renderIndex([
     { title: 'Skill – b', herkunft: 'eigen', status: 'aktiv', hint: '' },
-    { title: 'Skill – a', herkunft: 'extern', status: 'referenz', hint: 'p@1' },
+    { title: 'Skill – a', herkunft: 'eigen', status: 'aktiv', hint: 'p@1' },
   ]);
   const rows = md.split('\n').filter((l) => /^\| \d+ \|/.test(l));
   assert.strictEqual(rows.length, 2);

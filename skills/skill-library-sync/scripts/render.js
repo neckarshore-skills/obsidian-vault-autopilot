@@ -59,14 +59,76 @@ function renderNote(entry, notesZone) {
   return `${frontmatter}\n${body}${zone}`;
 }
 
-function renderIndex(rows) {
-  const sorted = [...rows].sort((a, b) =>
+// Grouped index, revised 2026-08-26 on the Founder's instruction after he read
+// the flat version. Primary grouping is by origin, in this fixed order; a
+// group with no rows is omitted entirely rather than rendered empty.
+const ORIGIN_GROUPS = ['Eigene', 'Externe', 'Andere'];
+
+// Secondary grouping is by the status VALUES themselves -- never a two-way
+// aktiv/inaktiv split. `referenz` means "vorhanden, aber nicht kuratiert",
+// explicitly not a value judgement (see the legend below); collapsing it
+// into "inaktiv" would misfile notes that are simply uncurated, not dead.
+const STATUS_GROUPS = ['aktiv', 'referenz', 'entfallen'];
+
+const TABLE_HEADER = ['| # | Skill | Herkunft | Status | Plugin/Ort-Hinweis |',
+                       '|---|-------|----------|--------|----------------------|'];
+
+const LEGEND = [
+  '## Legende',
+  '',
+  '| Spalte | Bedeutung |',
+  '|---|---|',
+  '| # | Laufende Nummer, durchgehend ueber alle Gruppen |',
+  '| Skill | Wikilink auf die Notiz des Skills |',
+  '| Herkunft | Woher der Skill kommt: eigen, extern, org-plugin, projekt-lokal, kandidat |',
+  '| Status | aktiv = von uns gepflegt · referenz = vorhanden, nicht kuratiert · entfallen = existiert nicht mehr |',
+  '| Plugin/Ort-Hinweis | Das Plugin samt Version, oder das Repo, aus dem der Skill stammt |',
+];
+
+function originGroupOf(herkunft) {
+  if (herkunft === 'eigen') return 'Eigene';
+  if (herkunft === 'extern') return 'Externe';
+  return 'Andere';
+}
+
+// Known statuses first, in the fixed order; any other value encountered is
+// still rendered -- never silently dropped -- appended after, alphabetically
+// for determinism.
+function statusOrder(statusesPresent) {
+  const known = STATUS_GROUPS.filter((s) => statusesPresent.has(s));
+  const rest = [...statusesPresent].filter((s) => !STATUS_GROUPS.includes(s)).sort();
+  return [...known, ...rest];
+}
+
+function sortByTitle(rows) {
+  return [...rows].sort((a, b) =>
     a.title.localeCompare(b.title, 'de', { sensitivity: 'base' }));
-  const header = ['| # | Skill | Herkunft | Status | Plugin/Ort-Hinweis |',
-                  '|---|-------|----------|--------|----------------------|'];
-  const body = sorted.map((r, i) =>
-    `| ${i + 1} | [[${r.title}]] | ${r.herkunft} | ${r.status} | ${r.hint || ''} |`);
-  return [...header, ...body].join('\n');
+}
+
+function renderIndex(rows) {
+  const byOrigin = { Eigene: [], Externe: [], Andere: [] };
+  for (const r of rows) byOrigin[originGroupOf(r.herkunft)].push(r);
+
+  let counter = 0;
+  const out = [];
+  for (const origin of ORIGIN_GROUPS) {
+    const originRows = byOrigin[origin];
+    if (originRows.length === 0) continue;
+    out.push(`## ${origin}`, '');
+    const statuses = new Set(originRows.map((r) => r.status));
+    for (const status of statusOrder(statuses)) {
+      const subRows = sortByTitle(originRows.filter((r) => r.status === status));
+      if (subRows.length === 0) continue;
+      out.push(`### ${status}`, '', ...TABLE_HEADER);
+      for (const r of subRows) {
+        counter += 1;
+        out.push(`| ${counter} | [[${r.title}]] | ${r.herkunft} | ${r.status} | ${r.hint || ''} |`);
+      }
+      out.push('');
+    }
+  }
+  out.push(...LEGEND);
+  return out.join('\n');
 }
 
 module.exports = { renderNote, renderIndex, noteTitle, fitDescription, DESCRIPTION_CAP };
