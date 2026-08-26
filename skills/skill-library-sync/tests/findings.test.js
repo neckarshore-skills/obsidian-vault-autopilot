@@ -65,3 +65,53 @@ test('a zero-conflict run still renders a conflicts count of 0', () => {
   const text = fs.readFileSync(writeFindings(v, RESULT, { now: new Date('2026-08-26T12:00:00Z') }), 'utf8');
   assert.match(text, /^  conflicts: 0$/m);
 });
+
+// --- Fix round 1 findings ---
+
+// FINDING 1a: an unrecognized conflict kind -- one describeConflict has no
+// dedicated branch for, and whose detail has no field in the locator chain
+// (path/from/to/title) -- must still render its detail, not just the bare
+// kind. The old fallback (JSON.stringify(c.detail), unguarded) printed this
+// correctly but crashed on a missing detail; the naive fix (locator-only,
+// bare kind otherwise) lost this case entirely.
+test('an unrecognized conflict kind with an unmatched detail field renders via JSON.stringify', () => {
+  const v = fs.mkdtempSync(path.join(os.tmpdir(), 'sls-find7-'));
+  const result = { ...RESULT, conflicts: [{ kind: 'future-kind', detail: { source: '/v/y.md' } }] };
+  const text = fs.readFileSync(writeFindings(v, result, { now: new Date('2026-08-26T12:00:00Z') }), 'utf8');
+  assert.match(text, /future-kind/);
+  assert.match(text, /\/v\/y\.md/);
+  assert.doesNotMatch(text, /undefined/);
+});
+
+// FINDING 1b: unstampable-note's `missing` field is the diagnosis of WHY the
+// note was refused (apply.test.js:473,504 confirm it is load-bearing for
+// this kind). A locator match on `detail.path` alone drops it -- the ledger
+// must still surface `missing`.
+test('unstampable-note renders both the path and the missing field', () => {
+  const v = fs.mkdtempSync(path.join(os.tmpdir(), 'sls-find8-'));
+  const result = {
+    ...RESULT,
+    conflicts: [{ kind: 'unstampable-note', detail: { path: '/v/library/broken.md', missing: 'status' } }],
+  };
+  const text = fs.readFileSync(writeFindings(v, result, { now: new Date('2026-08-26T12:00:00Z') }), 'utf8');
+  assert.match(text, /unstampable-note/);
+  assert.match(text, /\/v\/library\/broken\.md/);
+  assert.match(text, /missing: status/);
+});
+
+// FINDING 2: append must be structural (fs.appendFileSync), not a
+// read-whole-file/rewrite-whole-file shape resting on a blanket try/catch.
+// A visible symptom of the old shape: run it three times on the same day
+// and the header must appear exactly once -- a rewrite-based bug that
+// silently re-triggers "first run today" would duplicate it.
+test('three runs on the same day still carry exactly one frontmatter header', () => {
+  const v = fs.mkdtempSync(path.join(os.tmpdir(), 'sls-find9-'));
+  const now = new Date('2026-08-26T12:00:00Z');
+  writeFindings(v, RESULT, { now });
+  writeFindings(v, RESULT, { now });
+  const out = writeFindings(v, RESULT, { now });
+  const text = fs.readFileSync(out, 'utf8');
+  const headerCount = (text.match(/^---$/gm) || []).length;
+  assert.strictEqual(headerCount, 2, 'exactly one --- ... --- frontmatter block, not one per run');
+  assert.strictEqual((text.match(/## Run/g) || []).length, 3);
+});

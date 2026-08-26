@@ -77,10 +77,15 @@ function readLibrary(libraryDir, options = {}) {
 // moment a human decides whether to write, or reads what already ran.
 //
 // The `detail` shape VARIES between conflict kinds -- one producer's
-// `detail.from` is another's `detail.path`, and some kinds have no detail
-// at all -- so the fallback picks the first locator field actually present
-// rather than assuming one exists, and never lets a missing field print
-// the literal string "undefined".
+// `detail.from` is another's `detail.path`, some carry a diagnostic field
+// no locator chain would surface (`unstampable-note`'s `missing`), and a
+// kind not written yet (this function's own fallback branch) has no known
+// shape at all. Two different fixes for two different failure modes:
+// a kind with an unrecognized shape still needs SOME rendering of its
+// detail (JSON.stringify, guarded so a missing/empty detail never prints
+// the literal string "undefined"), while a kind whose diagnostic field is
+// the whole point (unstampable-note's `missing`) gets its own branch so
+// that field is never silently dropped by a locator match on `path` alone.
 function describeConflict(c) {
   if (c.kind === 'duplicate-note-title') {
     return `duplicate-note-title: ${c.detail.title} (${c.detail.notes.length} notes)`;
@@ -89,9 +94,13 @@ function describeConflict(c) {
     const orts = c.detail.entries.map((e) => e.ort).join(', ');
     return `duplicate-inventory-entry: ${c.detail.name} (${c.detail.herkunft}) at ${orts}`;
   }
+  if (c.kind === 'unstampable-note') {
+    return `unstampable-note: ${c.detail.path} (missing: ${c.detail.missing})`;
+  }
   const detail = c.detail || {};
   const locator = detail.path || detail.from || detail.to || detail.title || null;
-  return locator ? `${c.kind}: ${locator}` : c.kind;
+  if (locator) return `${c.kind}: ${locator}`;
+  return `${c.kind}: ${JSON.stringify(detail)}`;
 }
 
 function renderPreview(result) {
@@ -426,13 +435,25 @@ function writeFindings(vault, result, options = {}) {
     '',
   ].join('\n');
 
-  let existing = '';
-  try { existing = fs.readFileSync(target, 'utf8'); } catch { /* first run today */ }
-  const header = existing || [
-    '---', `date: ${day}`, 'skill: skill-library-sync',
-    'scope: skill-library', '---', '',
-  ].join('\n');
-  fs.writeFileSync(target, `${header}${block}`);
+  // Append-only, structurally: a header is written once, the first time this
+  // file exists, and every run after that only ever ADDS bytes to the end.
+  // A read-then-rewrite-the-whole-file shape (the earlier version of this
+  // function) makes the append guarantee rest on a blanket try/catch around
+  // the read -- any failure other than "file does not exist yet" (a
+  // permissions error, the path being a directory) would be silently read
+  // as "first run today", and the subsequent writeFileSync would overwrite
+  // the day's record with a fresh header plus only the new block. This is
+  // the one file the skill calls the record of what a run did to the
+  // user's vault, so losing earlier blocks is the one failure mode this
+  // function must not have.
+  if (!fs.existsSync(target)) {
+    const header = [
+      '---', `date: ${day}`, 'skill: skill-library-sync',
+      'scope: skill-library', '---', '',
+    ].join('\n');
+    fs.writeFileSync(target, header);
+  }
+  fs.appendFileSync(target, block);
   return target;
 }
 
