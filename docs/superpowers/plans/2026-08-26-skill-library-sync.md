@@ -1347,17 +1347,63 @@ nothing is ever deleted."
 
 ---
 
-### Task 8: Index regeneration
+### Task 8: Index regeneration — grouped by origin and status
+
+**REVISED 2026-08-26 on the Founder's instruction**, after he read the current index.
+The flat table is replaced by a grouped one, the stale prose block is deleted, and a
+column legend is added below the table. `renderIndex` (Task 2) changes shape; that is
+expected and in scope here.
 
 **Files:**
-- Modify: `skills/skill-library-sync/scripts/cli.js`
+- Modify: `skills/skill-library-sync/scripts/render.js` (`renderIndex`)
+- Modify: `skills/skill-library-sync/scripts/cli.js` (`rebuildIndex`)
 - Test: `skills/skill-library-sync/tests/index.test.js`
 
 **Interfaces:**
-- Consumes: `readLibrary`, `renderIndex`.
-- Produces: `rebuildIndex(libraryDir, { write })` returning the index markdown.
+- Consumes: `readLibrary` (cli.js), `renderIndex` (render.js).
+- Produces: `renderIndex(rows)` where each row is `{ title, herkunft, status, hint }`,
+  returning the grouped markdown; `rebuildIndex(libraryDir, { write })` returning the
+  full index markdown.
 
-- [ ] **Step 1: Write the failing test**
+**The shape, exactly:**
+
+Primary grouping by origin, in this order, as `##` headings:
+
+| Heading | Contains |
+|---|---|
+| `## Eigene` | `herkunft: eigen` |
+| `## Externe` | `herkunft: extern` |
+| `## Andere` | `org-plugin`, `projekt-lokal`, `kandidat` |
+
+Secondary grouping by status, as `###` headings, named for the status values
+themselves — `aktiv`, `referenz`, `entfallen` — NOT "aktiv / inaktiv".
+
+Why that naming, because it will look like a detail to whoever reads this next: the
+Founder asked what `referenz` means. The library's own legend answers *"vorhanden,
+aber nicht kuratiert"* and states outright that it is not a value judgement. It was
+assigned mechanically by origin in July; nobody ever checked usage. Calling those
+notes "inaktiv" would file `brainstorming` and `writing-plans` — running in the very
+session where the decision was made — under a heading that is false. Do not
+re-simplify this back to a two-way split.
+
+An empty group or subgroup is OMITTED, not rendered with a zero.
+
+Row numbering runs 1..N **continuously across the whole document**, not restarting per
+group, so a row number stays a stable reference in conversation.
+
+Two further instructions from the same message:
+- **Delete the "Bestandsaufnahme (2026-07-05)" prose block.** It claims 158 skills
+  against 162 rows and would read 186 after a sync. A paragraph that goes stale on
+  every run must not exist; the count is derived and stated once.
+- **Add a column legend BELOW the table** — one short table explaining `#`, `Skill`,
+  `Herkunft`, `Status`, `Plugin/Ort-Hinweis`. Below, because the table is what the
+  reader came for.
+
+**Carried from Task 7:** `rebuildIndex` must SKIP the retired subfolder when reading
+notes, for the same reason `readLibrary` now does — otherwise tombstones are listed in
+the live index. `readLibrary` already takes the exclusion; pass it through.
+
+- [ ] **Step 1: Write the failing tests**
 
 ```javascript
 'use strict';
@@ -1366,102 +1412,180 @@ const assert = require('node:assert');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { renderIndex } = require('../scripts/render.js');
 const { rebuildIndex } = require('../scripts/cli.js');
 const { renderNote } = require('../scripts/render.js');
 
-function lib(names) {
+const row = (title, herkunft, status, hint = '') => ({ title, herkunft, status, hint });
+
+test('rows are grouped by origin in the fixed order Eigene, Externe, Andere', () => {
+  const md = renderIndex([
+    row('Skill – x', 'extern', 'referenz'),
+    row('Skill – a', 'eigen', 'aktiv'),
+    row('Skill – m', 'org-plugin', 'aktiv'),
+  ]);
+  const order = ['## Eigene', '## Externe', '## Andere'].map((h) => md.indexOf(h));
+  assert.ok(order.every((i) => i > -1), 'a group heading is missing');
+  assert.deepStrictEqual(order, [...order].sort((p, q) => p - q), 'groups out of order');
+});
+
+test('org-plugin, projekt-lokal and kandidat all land under Andere', () => {
+  const md = renderIndex([
+    row('Skill – o', 'org-plugin', 'aktiv'),
+    row('Skill – p', 'projekt-lokal', 'aktiv'),
+    row('Skill – k', 'kandidat', 'kandidat'),
+  ]);
+  const andere = md.slice(md.indexOf('## Andere'));
+  for (const t of ['Skill – o', 'Skill – p', 'Skill – k']) assert.ok(andere.includes(t), t);
+  assert.ok(!md.includes('## Eigene'), 'an empty group was rendered');
+});
+
+test('status subgroups are named for the status values, never aktiv/inaktiv', () => {
+  const md = renderIndex([
+    row('Skill – a', 'eigen', 'aktiv'),
+    row('Skill – b', 'eigen', 'referenz'),
+    row('Skill – c', 'eigen', 'entfallen'),
+  ]);
+  assert.ok(md.includes('### aktiv'));
+  assert.ok(md.includes('### referenz'));
+  assert.ok(md.includes('### entfallen'));
+  assert.ok(!/inaktiv/i.test(md), 'the forbidden two-way split reappeared');
+});
+
+test('an empty group or subgroup is omitted, not rendered empty', () => {
+  const md = renderIndex([row('Skill – a', 'eigen', 'aktiv')]);
+  assert.ok(!md.includes('## Externe'));
+  assert.ok(!md.includes('### entfallen'));
+});
+
+test('numbering is continuous across groups, 1..N with no restart', () => {
+  const md = renderIndex([
+    row('Skill – a', 'eigen', 'aktiv'),
+    row('Skill – x', 'extern', 'referenz'),
+    row('Skill – m', 'org-plugin', 'aktiv'),
+  ]);
+  const nums = [...md.matchAll(/^\| (\d+) \|/gm)].map((m) => Number(m[1]));
+  assert.deepStrictEqual(nums, [1, 2, 3]);
+});
+
+test('rows are sorted A to Z inside each subgroup', () => {
+  const md = renderIndex([
+    row('Skill – c', 'eigen', 'aktiv'),
+    row('Skill – a', 'eigen', 'aktiv'),
+    row('Skill – b', 'eigen', 'aktiv'),
+  ]);
+  assert.ok(md.indexOf('Skill – a') < md.indexOf('Skill – b'));
+  assert.ok(md.indexOf('Skill – b') < md.indexOf('Skill – c'));
+});
+
+test('a column legend follows the table, and nothing follows it', () => {
+  const md = renderIndex([row('Skill – a', 'eigen', 'aktiv')]);
+  const legend = md.indexOf('## Legende');
+  assert.ok(legend > md.lastIndexOf('| 1 |'), 'the legend is not below the table');
+  for (const col of ['Herkunft', 'Status', 'Plugin/Ort-Hinweis']) {
+    assert.ok(md.slice(legend).includes(col), `legend does not explain ${col}`);
+  }
+});
+
+function libraryFixture(names) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sls-idx-'));
-  for (const n of names) {
-    fs.writeFileSync(path.join(dir, `Skill – ${n}.md`), renderNote({
-      name: n, suffix: '', description: 'd', herkunft: 'eigen', ort: `/${n}`,
-      plugin: '', status: 'aktiv', created: '2026-08-26 17:00', lastModified: '2026-08-26 17:00',
+  for (const [name, herkunft, status] of names) {
+    fs.writeFileSync(path.join(dir, `Skill – ${name}.md`), renderNote({
+      name, suffix: '', description: 'd', herkunft, ort: `/${name}`,
+      plugin: '', status, created: '2026-08-26 17:00', lastModified: '2026-08-26 17:00',
     }, ''));
   }
   fs.writeFileSync(path.join(dir, '_Skill Library.md'),
-    '---\ntitle: Skill Library — Index\n---\n\n# Skill Library\n\n## Skills\n\n| # | old |\n|---|---|\n| 1 | stale |\n');
+    ['---', 'title: Skill Library — Index', '---', '', '# Skill Library', '',
+     '## Bestandsaufnahme (2026-07-05)', '', '158 Skills gefunden ueber 4 Quellen.', '',
+     '## Skills', '', '| # | old |', '|---|---|', '| 1 | stale |', ''].join('\n'));
   return dir;
 }
 
-test('the index has one numbered row per note, 1..N, no gaps', () => {
-  const md = rebuildIndex(lib(['c', 'a', 'b']), { write: false });
-  const rows = md.split('\n').filter((l) => /^\| \d+ \|/.test(l));
-  assert.strictEqual(rows.length, 3);
-  assert.match(rows[0], /\| 1 \| \[\[Skill – a\]\]/);
-  assert.match(rows[2], /\| 3 \| \[\[Skill – c\]\]/);
-});
-
-test('the index states its count once, derived, not in prose', () => {
-  const md = rebuildIndex(lib(['a', 'b']), { write: false });
-  assert.match(md, /2 Skills/);
-  assert.strictEqual((md.match(/\d+ Skills/g) || []).length, 1);
-});
-
-test('writing replaces only the Skills section and keeps the frontmatter', () => {
-  const dir = lib(['a']);
+test('the stale Bestandsaufnahme block is gone after a rebuild', () => {
+  const dir = libraryFixture([['a', 'eigen', 'aktiv']]);
   rebuildIndex(dir, { write: true });
   const text = fs.readFileSync(path.join(dir, '_Skill Library.md'), 'utf8');
-  assert.match(text, /title: Skill Library — Index/);
-  assert.doesNotMatch(text, /stale/);
+  assert.ok(!text.includes('Bestandsaufnahme'), 'the stale block survived');
+  assert.ok(!text.includes('158'), 'the stale count survived');
+  assert.ok(text.includes('title: Skill Library — Index'), 'the frontmatter was lost');
+});
+
+test('rebuildIndex does not list notes from the retired subfolder', () => {
+  const dir = libraryFixture([['a', 'eigen', 'aktiv']]);
+  const retired = path.join(dir, 'Entfallen');
+  fs.mkdirSync(retired, { recursive: true });
+  fs.writeFileSync(path.join(retired, 'Skill – gone.md'), renderNote({
+    name: 'gone', suffix: '', description: 'd', herkunft: 'extern', ort: '/gone',
+    plugin: '', status: 'entfallen', created: '2026-08-26 17:00', lastModified: '2026-08-26 17:00',
+  }, ''));
+
+  const md = rebuildIndex(dir, { write: false, retiredSubfolder: 'Entfallen' });
+
+  assert.ok(!md.includes('Skill – gone'), 'a tombstone was listed in the live index');
+  assert.ok(md.includes('Skill – a'));
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `node --test skills/skill-library-sync/tests/index.test.js`
-Expected: FAIL — `rebuildIndex is not a function`
+Expected: FAIL — the current `renderIndex` emits one flat table with no headings.
 
-- [ ] **Step 3: Write minimal implementation**
+- [ ] **Step 3: Implement**
 
-Append to `cli.js` and export `rebuildIndex`:
+Rewrite `renderIndex` in `render.js` to group, and extend `rebuildIndex` in `cli.js`
+to accept and pass through `retiredSubfolder` and to replace the whole body below the
+`# Skill Library` heading (so the stale prose block goes with it) rather than only the
+`## Skills` section.
 
-```javascript
-const INDEX_FILE = '_Skill Library.md';
+Group mapping: `eigen` to `Eigene`, `extern` to `Externe`, everything else to `Andere`.
+Status subgroups in the order `aktiv`, `referenz`, `entfallen`, then any other value
+encountered, so an unknown status is rendered rather than dropped. Number rows with a
+single counter across the whole document. Emit the legend last:
 
-function rebuildIndex(libraryDir, options = {}) {
-  const notes = readLibrary(libraryDir);
-  const rows = notes.map((n) => ({
-    title: n.title,
-    herkunft: n.frontmatter.herkunft || '',
-    status: n.frontmatter.status || '',
-    hint: n.frontmatter.plugin || '',
-  }));
-  // The count is DERIVED and stated once. The hand-built index carried it in a
-  // prose paragraph that its own table had already contradicted (158 against 162).
-  const section = ['## Skills', '', `${rows.length} Skills.`, '', renderIndex(rows), ''].join('\n');
-  const target = path.join(libraryDir, INDEX_FILE);
-  let existing = '';
-  try { existing = fs.readFileSync(target, 'utf8'); } catch { /* first run */ }
-  const head = existing ? existing.split('## Skills')[0] : '---\ntitle: Skill Library — Index\n---\n\n# Skill Library\n\n';
-  const out = `${head}${section}`;
-  if (options.write) fs.writeFileSync(target, out);
-  return out;
-}
+```
+## Legende
+
+| Spalte | Bedeutung |
+|---|---|
+| # | Laufende Nummer, durchgehend ueber alle Gruppen |
+| Skill | Wikilink auf die Notiz des Skills |
+| Herkunft | Woher der Skill kommt: eigen, extern, org-plugin, projekt-lokal, kandidat |
+| Status | aktiv = von uns gepflegt · referenz = vorhanden, nicht kuratiert · entfallen = existiert nicht mehr |
+| Plugin/Ort-Hinweis | Das Plugin samt Version, oder das Repo, aus dem der Skill stammt |
 ```
 
-- [ ] **Step 4: Confirm it is wired into the write path**
+- [ ] **Step 4: Confirm the write path still calls it**
 
-`applyPlan` (Task 7) contains `rebuildIndex(libraryDir, { write: true });` before it
-assembles its result. Confirm the call is there and that `rebuildIndex` is defined
-above it in the file. An index regenerated only when somebody calls the function by
-hand is the drift this skill exists to end.
+`applyPlan` (Task 7) contains `rebuildIndex(libraryDir, { write: true })`. It must now
+also receive the retired subfolder. Update that call site and confirm the existing
+apply tests still pass.
 
-- [ ] **Step 5: Run test to verify it passes**
+- [ ] **Step 5: Run the tests**
 
-Run: `node --test skills/skill-library-sync/tests/index.test.js`
-Expected: PASS, 3 tests
+Run: `node --test skills/skill-library-sync/tests/*.test.js`
+Expected: PASS, including every earlier suite.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add skills/skill-library-sync/scripts/cli.js skills/skill-library-sync/tests/index.test.js
-git commit -m "feat(skill-library-sync): regenerate the index from the notes
+git add skills/skill-library-sync/scripts/render.js skills/skill-library-sync/scripts/cli.js skills/skill-library-sync/tests/index.test.js
+git commit -m "feat(skill-library-sync): group the index by origin and status
 
-The count is derived and stated once. The hand-built index carried it in a
-prose paragraph its own table already contradicted -- 158 against 162 rows --
-which is what a fact with two homes looks like after seven weeks."
+Grouped by origin (Eigene / Externe / Andere), then by the status values
+themselves. NOT aktiv/inaktiv: the library's own legend defines referenz as
+'vorhanden, aber nicht kuratiert' and says outright it is no value judgement,
+so labelling 120 notes inaktiv would file brainstorming and writing-plans --
+both running while the decision was made -- under a heading that is false.
+
+The stale Bestandsaufnahme paragraph is deleted. It claimed 158 against a
+table of 162 and would read 186 after a sync; a fact with two homes goes
+stale in the one that nobody regenerates.
+
+A column legend follows the table, and tombstones are excluded from the live
+index for the same reason readLibrary now skips them."
 ```
-
----
 
 ### Task 9: The findings ledger
 

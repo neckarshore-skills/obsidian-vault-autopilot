@@ -153,10 +153,46 @@ Two rules the current library gets wrong and this skill must not inherit:
 
 ## The index
 
-`_Skill Library.md` is regenerated from the notes: one row per note, renumbered
-without gaps, sorted A→Z. The prose "Bestandsaufnahme" paragraph currently states a
-count that the table contradicts (158 against 162 rows) — the count moves out of prose
-and is derived, one fact with one home.
+`_Skill Library.md` is regenerated from the notes. **Revised 2026-08-26 on the
+Founder's instruction, after he read the current index.** The flat 162-row table is
+replaced by a grouped one.
+
+**Primary grouping — origin, three groups in this order:**
+
+| Group | Contains |
+|---|---|
+| Eigene | `herkunft: eigen` — the user's own skills |
+| Externe | `herkunft: extern` — skills from third-party plugins |
+| Andere | `org-plugin`, `projekt-lokal`, `kandidat` |
+
+**Secondary grouping — the status values themselves, named as they are:**
+`aktiv`, `referenz`, `entfallen`. Not "aktiv / inaktiv".
+
+That naming is a correction the Founder made after asking what `referenz` actually
+means. The library's own legend says it is *"vorhanden, aber nicht kuratiert"*, and
+states explicitly that it is **not** a value judgement — the value was assigned
+mechanically by origin at the 2026-07-05 inventory, and no one ever checked whether a
+skill was used. Labelling those 120 notes "inaktiv" would have put `brainstorming`,
+`writing-plans` and `subagent-driven-development` under a heading contradicted by the
+session that was running while the decision was made. A wrong label in an index is
+worse than no label.
+
+A group or subgroup with no rows is omitted entirely rather than rendered empty.
+
+**The "Bestandsaufnahme (2026-07-05)" prose block is deleted**, on the Founder's
+instruction. It states "158 Skills" against a table of 162 rows, and would read 186
+after the first sync. A paragraph that goes stale on every run is precisely the fact
+that must not have a second home — the count is derived and stated once.
+
+**A column legend goes BELOW the table**, explaining what each column means. Below,
+because the table is what the reader came for.
+
+### Deferred, recorded rather than built
+
+The question the status column cannot answer is *which skills do I actually use*.
+That wants a usage measurement — counting invocations out of session transcripts —
+not a status value. Filed to the plugin backlog on the Founder's instruction; it is
+not in this build's scope.
 
 ## Report
 
