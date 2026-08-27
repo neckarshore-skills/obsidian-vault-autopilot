@@ -8,6 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 For implementation detail and internal release notes, see [`logs/changelog.md`](logs/changelog.md).
 
+## [0.4.0] — 2026-08-26
+
+### Added
+
+- **`skill-library-sync`.** Reconciles a vault's Skill Library against the skills that actually exist — your own skills, installed plugins, and configured source repositories — read from named sources only, never a filesystem search. `scan` and `diff` are read-only; `apply` (preview by default, `--write` to act) creates notes for skills with none, relocates notes whose skill moved, retires notes for skills that no longer exist (never deletes — moves to a retired subfolder with `status: entfallen`), and renames notes that gained a second origin. Two independent write-side caps (a mass-change ceiling and a retire-specific cap, each overridable) and an empty-inventory refusal guard against acting on a misconfigured or stale scan.
+
+### Note on this release
+
+This version bump matters beyond the new skill. Forty-two commits landed on `main` between v0.3.0 (2026-06-27) and this release without the version number moving, so an installed plugin has been stale since 2026-06-27 and `claude plugin update` has been answering "already at the latest version (0.3.0)" the entire time — silently withholding every one of those commits, including two fixes already on `main` and already believed shipped:
+
+- **#41 — the body-boundary fix** (`fix(skills): boundaries no longer deny the body write they mandate`, 2026-08-13): the Nahbereich boundary callout in `inbox-sort` and `property-classify` had been forbidding the very body write those skills' own steps require.
+- **#83 — the payload cleanup** (`fix: stop shipping an org-internal session policy in the plugin payload`, 2026-07-30): an org-internal session policy file was being distributed inside the public plugin payload.
+
+v0.4.0 delivers `skill-library-sync` and everything stranded behind the unmoved number, in one release a `claude plugin update` will actually pick up.
+
 ## [0.3.0] — 2026-06-27
 
 ### Added
