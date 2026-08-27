@@ -60,6 +60,15 @@ function buildInventory({ ownSkillsDir, installedPluginsPath, sourceRoots }) {
       throw new Error(`installed plugins manifest is unreadable at ${installedPluginsPath}: ${err.message}`);
     }
   }
+  // JSON.parse('null') returns null, and JSON.parse('[]') returns an array:
+  // both reach `.plugins` and either throw or read as empty. An empty
+  // inventory is not a harmless outcome here -- the apply path retires every
+  // skill it cannot see -- so a manifest whose root is not a plain object is
+  // refused with the same message an unreadable file gets, rather than
+  // quietly becoming "no plugins installed".
+  if (installed === null || typeof installed !== 'object' || Array.isArray(installed)) {
+    throw new Error(`installed plugins manifest is unreadable at ${installedPluginsPath}: root is not an object`);
+  }
   for (const [key, value] of Object.entries(installed.plugins || {})) {
     const [pluginName, marketplace = ''] = key.split('@');
     const herkunft = /neckarshore/i.test(key) ? 'org-plugin' : 'extern';
@@ -70,7 +79,14 @@ function buildInventory({ ownSkillsDir, installedPluginsPath, sourceRoots }) {
       // path.join() unchecked and ended the whole run with a TypeError. An
       // unusable entry is one entry's problem, not the inventory's: skip it
       // and read the rest.
-      if (!entry || typeof entry.installPath !== 'string' || entry.installPath === '') continue;
+      if (!entry || typeof entry.installPath !== 'string' || entry.installPath === '') {
+        // Reported, never swallowed: a skipped entry takes its skills out of
+        // the inventory, and a skill missing from the inventory is what the
+        // apply path retires. The run continues -- one unusable entry is not
+        // the whole manifest's problem -- but it does not continue quietly.
+        console.error(`warnung: eintrag "${key}" im plugin-manifest hat keinen brauchbaren installPath und wird uebersprungen`);
+        continue;
+      }
       const hint = `${marketplace}/${pluginName}@${entry.version || 'unbekannt'}`;
       for (const dir of skillsIn(path.join(entry.installPath, 'skills'))) {
         out.push({

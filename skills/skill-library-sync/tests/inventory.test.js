@@ -164,3 +164,39 @@ test('a malformed entry does not suppress the well-formed entries beside it', ()
   const inv = buildInventory({ ownSkillsDir: f.own, installedPluginsPath: mixed, sourceRoots: [] });
   assert.ok(inv.some((e) => e.name === 'thing-do'), 'the well-formed entry was lost with the broken one');
 });
+
+// JSON.parse('null') returns null, and `installed.plugins` then throws one
+// line BEFORE the per-entry guard can run. A manifest root that is not an
+// object is the same class of damage as an unreadable file, so it gets the
+// same honest refusal rather than a silent empty inventory -- an inventory
+// that silently loses its plugins is an inventory that reports live skills
+// as retired.
+for (const root of ['null', '"a string"', '[]', '42']) {
+  test(`a manifest root of ${root} is refused, not silently read as empty`, () => {
+    const f = fixture();
+    const bad = path.join(f.root, `root-${Buffer.from(root).toString('hex')}.json`);
+    fs.writeFileSync(bad, root);
+    assert.throws(
+      () => buildInventory({ ownSkillsDir: f.own, installedPluginsPath: bad, sourceRoots: [] }),
+      /installed plugins manifest is unreadable/);
+  });
+}
+
+// "Do no harm" says a thing that cannot be repaired is REPORTED, never
+// silently skipped. A skipped plugin entry removes skills from the inventory,
+// and skills missing from the inventory are what the apply path retires.
+test('a skipped entry is named on stderr, not swallowed', () => {
+  const f = fixture();
+  const broken = path.join(f.root, 'noisy_plugins.json');
+  fs.writeFileSync(broken, JSON.stringify({ plugins: { 'no-path@vendor': [{ version: '2.0.0' }] } }));
+  const realError = console.error;
+  const lines = [];
+  console.error = (...args) => lines.push(args.join(' '));
+  try {
+    buildInventory({ ownSkillsDir: f.own, installedPluginsPath: broken, sourceRoots: [] });
+  } finally {
+    console.error = realError;
+  }
+  assert.ok(lines.some((l) => l.includes('no-path@vendor')),
+    `the skipped entry was not named; stderr was:\n${lines.join('\n')}`);
+});
