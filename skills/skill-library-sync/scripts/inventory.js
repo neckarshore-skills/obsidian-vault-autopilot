@@ -64,7 +64,14 @@ function buildInventory({ ownSkillsDir, installedPluginsPath, sourceRoots }) {
     const [pluginName, marketplace = ''] = key.split('@');
     const herkunft = /neckarshore/i.test(key) ? 'org-plugin' : 'extern';
     for (const entry of Array.isArray(value) ? value : [value]) {
-      const hint = `${marketplace}/${pluginName}@${entry.version}`;
+      // Nothing guards the shape of ~/.claude/plugins/installed_plugins.json --
+      // it is a file the user (or another tool) can hand-edit. An entry that
+      // is a bare string, null, or an object without installPath reached
+      // path.join() unchecked and ended the whole run with a TypeError. An
+      // unusable entry is one entry's problem, not the inventory's: skip it
+      // and read the rest.
+      if (!entry || typeof entry.installPath !== 'string' || entry.installPath === '') continue;
+      const hint = `${marketplace}/${pluginName}@${entry.version || 'unbekannt'}`;
       for (const dir of skillsIn(path.join(entry.installPath, 'skills'))) {
         out.push({
           name: path.basename(dir), herkunft, ort: dir,

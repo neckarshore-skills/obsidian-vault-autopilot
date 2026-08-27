@@ -185,6 +185,16 @@ for (const shape of [{ label: 'relocate', secondOrigin: false }, { label: 'renam
         assert.ok(!namedInConflicts,
           `a well-formed note must be handled, not refused: ${c.id}\n${out}`);
         assert.ok(survived, `the notes zone must survive byte-for-byte: ${c.id}`);
+        // `survived` is vacuous when there are no protected bytes -- every
+        // string contains ''. The empty-file case is precisely where a bad
+        // rewrite would leave a blank note behind and this assertion would
+        // still pass, so it has to prove the rewrite HAPPENED.
+        if (c.protectedText === '') {
+          const rebuilt = [...after.values()].some(
+            (text) => /^type: skill$/m.test(text) && text.includes('## Notizen'));
+          assert.ok(rebuilt,
+            `an empty note must be rebuilt into a full note, not left blank: ${c.id}\n${out}`);
+        }
       }
 
       // No note this run writes may contain the literal string

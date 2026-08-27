@@ -24,7 +24,7 @@ logs/
   run-history.md           <- Skill execution log
 ```
 
-## Skills (4 launch-scope + 6 in-development)
+## Skills (4 launch-scope + 7 in-development)
 
 Launch-scope = Cycle-4 Gold-Run validated (see D19 in the internal decisions ledger). In-development beta skills live in the codebase but were not part of the launch-scope test matrix.
 

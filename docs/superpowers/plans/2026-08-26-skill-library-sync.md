@@ -1539,6 +1539,12 @@ to accept and pass through `retiredSubfolder` and to replace the whole body belo
 `# Skill Library` heading (so the stale prose block goes with it) rather than only the
 `## Skills` section.
 
+> **Note:** superseded during the build. The shipped `rebuildIndex` does NOT replace
+> the whole body: `readIndexParts` (`cli.js`) carries the H1 and the user's intro zone
+> through verbatim and replaces only the generated rows below them. The step above is
+> the draft instruction, kept as a record; the code is the stricter of the two, and the
+> stricter one is right — an index intro is user prose.
+
 Group mapping: `eigen` to `Eigene`, `extern` to `Externe`, everything else to `Andere`.
 Status subgroups in the order `aktiv`, `referenz`, `entfallen`, then any other value
 encountered, so an unknown status is rendered rather than dropped. Number rows with a

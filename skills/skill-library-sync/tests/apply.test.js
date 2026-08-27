@@ -7,6 +7,13 @@ const path = require('node:path');
 const { applyPlan } = require('../scripts/cli.js');
 const { renderNote } = require('../scripts/render.js');
 
+// applyPlan's inventory defaults resolve against $HOME (cli.js ownSkillsDir /
+// installedPluginsPath). Without this, every test in this file reads the
+// developer's real ~/.claude and the run stops being reproducible on a
+// different machine. Read-only, so nothing was ever at risk -- but a test
+// whose result depends on the machine it runs on is not a guard.
+process.env.HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'sls-apply-home-'));
+
 function vaultFixture({ ownSkills = ['alpha'], notes = [] } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sls-apply-'));
   const vault = path.join(root, 'vault');
@@ -528,4 +535,26 @@ test('the retire-cap refusal message reports an integer, not a fraction', () => 
     assert.match(err.message, /cap 40\b/, 'the reported cap must be floored (40, not 40.25)');
     assert.doesNotMatch(err.message, /40\.25/);
   }
+});
+
+// M2 left `eol` correct and the two PATTERNS wrong: `/^status:.*$/m` -- `.`
+// matches `\r` in JavaScript -- swallows the carriage return, so the
+// replacement writes a bare-LF line into a CRLF file, and `$&` on
+// last_modified carries the `\r` INTO the replacement and produces `\r\r\n`.
+// A stray CR inside a user's note is exactly the silent degradation the
+// product exists to prevent.
+test('retiring a CRLF note keeps the file CRLF and inserts no stray carriage return', () => {
+  const body = renderNote({
+    name: 'gone-crlf', suffix: '', description: 'd', herkunft: 'extern', ort: '/gone',
+    plugin: '', status: 'referenz', created: '2026-07-05 15:45', lastModified: '2026-07-05 15:45',
+  }, '').replace(/\n/g, '\r\n');
+  const f = vaultFixture({ notes: [{ title: 'Skill – gone-crlf', body }] });
+
+  applyPlan(f.vault, { write: true, inventory: [{ name: 'alpha', herkunft: 'eigen', ort: '/keep', plugin: '', description: 'd' }] });
+
+  const text = fs.readFileSync(path.join(f.lib, 'Entfallen', 'Skill – gone-crlf.md'), 'utf8');
+  assert.ok(!/\r\r/.test(text), 'a doubled carriage return was written');
+  assert.ok(!/[^\r]\n/.test(text), 'a bare-LF line was written into a CRLF file');
+  assert.match(text, /status: entfallen\r\n/);
+  assert.match(text, /entfallen_am: \d{4}-\d{2}-\d{2}[^\r\n]*\r\n/);
 });

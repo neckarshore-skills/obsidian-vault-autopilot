@@ -188,11 +188,11 @@ Every launch-scope skill went through **multipass testing** before shipping — 
 
 **v0.3.0 live UAT** (real vault, 1,244 notes): 733 property reorders applied, 0 violations, 328 notes modified, 12 titles fixed, 0 data loss.
 
-**Automated test suite** (this repo, run continuously in CI): 439 unit-test assertions (`node --test`) plus 13 shell-based validation suites covering cross-platform edge cases (Windows trailing-dot folders, clone-integrity, YAML sanity, recipe conformance) — all green, 0 failures.
+**Automated test suite** (this repo, run continuously in CI): 442 unit-test assertions (`node --test`) plus 11 shell-based validation suites covering cross-platform edge cases (Windows trailing-dot folders, clone-integrity, YAML sanity, recipe conformance) — all green, 0 failures.
 
 ### Estate test-scope stats
 
-This repo is a **producer** for the neckarshore.ai estate test-count. On every `push:main`, CI counts the gated `node --test` assertions (the 439 above) from node's own TAP reporter — never grep — and publishes a contract-valid `stats.json` to the dedicated [`stats-data`](../../tree/stats-data/stats.json) branch: a single-file data branch, **not** `main`. `main` is a protected branch (a bot cannot push to it without weakening its protection), so the machine artifact lives on its own unprotected branch instead. The 10 pure-bash validation suites are also CI-gated but emit one pass/fail per script rather than a per-assertion count, so they are not folded into the machine per-test total. The neckarshore.ai aggregator fetches the file via `contents/stats.json?ref=stats-data`. Contract: [`stats-json-contract.md`](https://github.com/neckarshore-ai/neckarshore-planning/blob/main/docs/reference/stats-json-contract.md).
+This repo is a **producer** for the neckarshore.ai estate test-count. On every `push:main`, CI counts the gated `node --test` assertions (the 442 above) from node's own TAP reporter — never grep — and publishes a contract-valid `stats.json` to the dedicated [`stats-data`](../../tree/stats-data/stats.json) branch: a single-file data branch, **not** `main`. `main` is a protected branch (a bot cannot push to it without weakening its protection), so the machine artifact lives on its own unprotected branch instead. The 11 pure-bash validation suites are also CI-gated but emit one pass/fail per script rather than a per-assertion count, so they are not folded into the machine per-test total. The neckarshore.ai aggregator fetches the file via `contents/stats.json?ref=stats-data`. Contract: [`stats-json-contract.md`](https://github.com/neckarshore-ai/neckarshore-planning/blob/main/docs/reference/stats-json-contract.md).
 
 ## Contributing
 

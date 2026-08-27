@@ -132,3 +132,35 @@ test('a skills directory that is not readable (e.g., is a file) throws with the 
     (err) => err.message.includes(unreadableSkillsPath),
   );
 });
+
+// A hand-edited or half-written installed_plugins.json is not a theoretical
+// shape: the file lives in the user's ~/.claude and no schema guards it. An
+// entry that is a bare string, or an object with no installPath, reached
+// path.join() unchecked and killed the run with a TypeError -- a crash where
+// the honest answer is "this entry is unusable, here are the rest".
+test('a malformed manifest entry is skipped, not crashed on', () => {
+  const f = fixture();
+  const broken = path.join(f.root, 'broken_plugins.json');
+  fs.writeFileSync(broken, JSON.stringify({
+    plugins: {
+      'bare-string@vendor': ['just-a-string'],
+      'no-path@vendor': [{ version: '2.0.0' }],
+      'null-entry@vendor': [null],
+    },
+  }));
+  const inv = buildInventory({ ownSkillsDir: f.own, installedPluginsPath: broken, sourceRoots: [] });
+  assert.deepStrictEqual(inv.map((e) => e.name), ['note-rename']);
+});
+
+// The good half of the same manifest must still be read: skipping the broken
+// entry is only correct if it does not take its neighbours with it.
+test('a malformed entry does not suppress the well-formed entries beside it', () => {
+  const f = fixture();
+  const mixed = path.join(f.root, 'mixed_plugins.json');
+  const good = JSON.parse(fs.readFileSync(f.installed, 'utf8')).plugins['thing@vendor'];
+  fs.writeFileSync(mixed, JSON.stringify({
+    plugins: { 'broken@vendor': [{ version: '1.0.0' }], 'thing@vendor': good },
+  }));
+  const inv = buildInventory({ ownSkillsDir: f.own, installedPluginsPath: mixed, sourceRoots: [] });
+  assert.ok(inv.some((e) => e.name === 'thing-do'), 'the well-formed entry was lost with the broken one');
+});
