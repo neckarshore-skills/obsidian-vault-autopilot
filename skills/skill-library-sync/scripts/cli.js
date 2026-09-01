@@ -17,7 +17,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { parseNote, isReplaceableZone, NOTES_HEADING } = require('./library.js');
-const { noteTitle, renderNote, renderIndex } = require('./render.js');
+const { noteTitle, renderNote, renderIndex, carryFrontmatter } = require('./render.js');
 const { buildInventory } = require('./inventory.js');
 const { diffLibrary } = require('./diff.js');
 const { loadConfig } = require('./config.js');
@@ -68,7 +68,7 @@ function readLibrary(libraryDir, options = {}) {
       notes.push({
         title, name: m[1], suffix: m[2] || '', file: p,
         frontmatter: parsed.frontmatter, notesZone: parsed.notesZone,
-        machineBody: parsed.machineBody,
+        machineBody: parsed.machineBody, frontmatterRaw: parsed.frontmatterRaw,
         hasFrontmatter: parsed.hasFrontmatter, hasNotesHeading: parsed.hasNotesHeading,
         replaceable: isReplaceableZone(parsed.notesZone),
       });
@@ -786,7 +786,7 @@ function applyPlan(vault, options = {}) {
         // literal string `undefined` into the user's YAML.
         created: note.frontmatter.created || nowStamp(now),
         lastModified: nowStamp(now),
-      }, note.replaceable ? '' : note.notesZone),
+      }, note.replaceable ? '' : note.notesZone, carryFrontmatter(note.frontmatterRaw)),
     });
   }
   // A rename carries the note's file to its new title. The relocate branch above
@@ -840,7 +840,7 @@ function applyPlan(vault, options = {}) {
         // literal `undefined`.
         created: note.frontmatter.created || nowStamp(now),
         lastModified: nowStamp(now),
-      }, note.replaceable ? '' : note.notesZone)
+      }, note.replaceable ? '' : note.notesZone, carryFrontmatter(note.frontmatterRaw))
         : fs.readFileSync(note.file, 'utf8'),
     });
   }

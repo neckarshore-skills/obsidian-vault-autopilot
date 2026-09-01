@@ -30,9 +30,17 @@ write only after the user confirms.
 
 ## Fences
 
-1. **The body boundary.** Everything above `## Notizen` belongs to this skill.
-   Everything below belongs to the user and is never written. The placeholder stub
-   is the one exception and is matched byte-for-byte - never by length.
+1. **The body boundary.** Everything below `## Notizen` belongs to the user and
+   is never written. The placeholder stub is the one exception and is matched
+   byte-for-byte - never by length.
+   Above the boundary the split is by KEY, not by position: this skill owns
+   `title`, `type`, `description`, `herkunft`, `ort`, `plugin`, `status`,
+   `created`, `last_modified` and the two generated tags (`Claude/ClaudeCode`
+   and `Skill/<herkunft>`) - it derives them from the inventory, so it also
+   replaces them. Every other frontmatter key, and every other tag, is the
+   user's: carried through a rewrite verbatim, as lines, never re-serialised.
+   The origin tag has to be owned rather than carried, because a relocate can
+   change `herkunft` and a stale `Skill/<old>` must not survive.
 2. **No filesystem discovery.** Only paths the config names or that
    `installed_plugins.json` names. Never a tree walk. Outside the vault this skill
    is read-only, always.
