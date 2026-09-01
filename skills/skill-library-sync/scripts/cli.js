@@ -20,7 +20,7 @@ const { parseNote, isReplaceableZone, NOTES_HEADING } = require('./library.js');
 const { noteTitle, renderNote, renderIndex, carryFrontmatter } = require('./render.js');
 const { buildInventory } = require('./inventory.js');
 const { diffLibrary } = require('./diff.js');
-const { loadConfig } = require('./config.js');
+const { loadConfig, expandHome } = require('./config.js');
 
 const TITLE_RE = /^Skill – (.+?)(?: \((eigen|extern|org-plugin|projekt-lokal)\))?$/;
 
@@ -122,6 +122,7 @@ function renderPreview(result) {
     `created:   ${result.created.length}`,
     `relocated: ${relocated.length}`,
     `retired:   ${result.retired.length}`,
+    `unverified: ${(result.unverified || []).length}`,
     `renamed:   ${result.renamed.length}`,
     `unchanged: ${unchanged.length}`,
     `conflicts: ${result.conflicts.length}`,
@@ -134,6 +135,10 @@ function renderPreview(result) {
   // less informative than the other four buckets it sits beside.
   for (const r of relocated) lines.push(`  relocate: ${r.note.title} -> ${r.ort}`);
   for (const r of result.retired) lines.push(`  retire: ${r.title}`);
+  // Named, never merely counted: a note the run declined to retire is exactly
+  // the note the user has to decide about, and the reason tells him which fix
+  // applies -- configure a source root, or repair the note's `ort`.
+  for (const u of result.unverified || []) lines.push(`  unverified: ${u.title} (${u.reason})`);
   for (const c of result.conflicts) lines.push(`  conflict: ${describeConflict(c)}`);
   return lines.join('\n');
 }
@@ -196,6 +201,7 @@ function renderApplyResult(result) {
     `created:   ${result.created.length}`,
     `relocated: ${result.relocated.length}`,
     `retired:   ${result.moved.length}`,
+    `unverified: ${(result.unverified || []).length}`,
     `renamed:   ${result.renamed.length}`,
     `unchanged: ${result.unchanged}`,
     `conflicts: ${result.conflicts.length}`,
@@ -204,6 +210,7 @@ function renderApplyResult(result) {
   for (const f of result.relocated) lines.push(`  relocate: ${f}`);
   for (const f of result.moved) lines.push(`  retire: ${f}`);
   for (const f of result.renamed) lines.push(`  rename: -> ${f}`);
+  for (const u of result.unverified || []) lines.push(`  unverified: ${u.title} (${u.reason})`);
   for (const c of result.conflicts) lines.push(`  conflict: ${describeConflict(c)}`);
   return lines.join('\n');
 }
@@ -221,6 +228,8 @@ function renderApplyPreview(result) {
   if (result.libraryPathWarning) lines.push(`warning: ${result.libraryPathWarning}`);
   lines.push(`planned:   ${result.planned}`);
   lines.push(`unchanged: ${result.unchanged}`);
+  lines.push(`unverified: ${(result.unverified || []).length}`);
+  for (const u of result.unverified || []) lines.push(`  unverified: ${u.title} (${u.reason})`);
   lines.push(`conflicts: ${result.conflicts.length}`);
   for (const c of result.conflicts) lines.push(`  conflict: ${describeConflict(c)}`);
   return lines.join('\n');
@@ -271,7 +280,12 @@ function main(argv) {
     return 0;
   }
   if (command === 'diff') {
-    process.stdout.write(`${renderPreview(diffLibrary(inventory, notes))}\n`);
+    // The same verification the apply path runs. `diff` is the surface a user
+    // reads BEFORE deciding to apply, so showing him a retirement here that
+    // apply would decline is the one divergence this command must not have.
+    const raw = diffLibrary(inventory, notes);
+    const { verified, unverified } = verifyRetirements(raw.retired);
+    process.stdout.write(`${renderPreview({ ...raw, retired: verified, unverified })}\n`);
     return 0;
   }
   process.stderr.write(`unknown command: ${command}\n`);
@@ -409,6 +423,66 @@ function folderFor(herkunft) {
 // exist -- a wrong reason is worse than no report. duplicate-inventory-entry
 // conflicts are already fully handled at the classifier level; no write-side
 // block is needed or wanted for them.
+// #90: a retirement must mean "I looked where this note says the skill lives
+// and it is gone" -- never "I was never told to look". An empty `source_roots`
+// is the absence of evidence, not evidence of absence, and using that silence
+// to stamp a live skill as entfallen is the one thing a library whose job is
+// telling you what you have must not do.
+//
+// FENCE. inventory.js reads NAMED sources only (config, installed_plugins.json)
+// and does no search. This check adds a THIRD named source and it is declared
+// here rather than arriving quietly: the single path a note records in its own
+// `ort` frontmatter, in the user's own vault. One existsSync per retirement
+// candidate, no glob, no walk, no recursion, and never a write. A path-coverage
+// test (is `ort` under a root we searched?) was considered and rejected: an
+// uninstalled plugin's path is also outside every searched root, so it cannot
+// tell a genuinely-gone skill from an unsearched one and would turn the retire
+// path off entirely.
+function verifyRetirements(retired) {
+  const verified = [];
+  const unverified = [];
+  for (const note of retired) {
+    const recorded = String((note.frontmatter && note.frontmatter.ort) || '').trim();
+    if (!recorded) {
+      // A note with NO frontmatter block at all is a different, older defect
+      // with its own channel: the `unstampable-note` conflict, which refuses
+      // the move AND names the missing field so the note can be repaired.
+      // Claiming it here would silently replace that specific diagnosis with a
+      // vaguer one. Let it fall through; the write path still never moves it.
+      if (!note.hasFrontmatter) { verified.push(note); continue; }
+      // Frontmatter present but no `ort`: there is nowhere to have looked, so
+      // this cannot be called gone either. Fail closed.
+      unverified.push({ note, title: note.title, reason: 'no-recorded-location' });
+      continue;
+    }
+    let present;
+    try {
+      // statSync, not existsSync: existsSync swallows EVERY error and returns
+      // false, so a path the filesystem cannot even evaluate would be
+      // indistinguishable from a skill that is genuinely gone -- and would be
+      // retired on the strength of an unanswerable question. `throwIfNoEntry:
+      // false` keeps the ordinary "not there" answer cheap while letting a
+      // real error (an invalid path, a permissions failure) reach the catch.
+      present = fs.statSync(path.join(expandHome(recorded), 'SKILL.md'),
+        { throwIfNoEntry: false }) !== undefined;
+    } catch {
+      // A path the filesystem refuses to evaluate at all is not proof the skill
+      // is gone -- it is proof the question could not be asked. Treating the
+      // throw as "absent" (the first version of this function did) retires on
+      // the strength of an unanswerable question, which is the whole defect
+      // this function exists to close.
+      unverified.push({ note, title: note.title, reason: 'unreadable-recorded-location' });
+      continue;
+    }
+    if (present) {
+      unverified.push({ note, title: note.title, reason: 'skill-still-at-recorded-location' });
+    } else {
+      verified.push(note);
+    }
+  }
+  return { verified, unverified };
+}
+
 function conflictedTitleSet(conflicts) {
   const titles = new Set();
   for (const c of conflicts) {
@@ -625,6 +699,7 @@ function writeFindings(vault, result, options = {}) {
   const target = path.join(dir, `${day}-skill-library-sync.md`);
 
   const conflicts = result.conflicts || [];
+  const unverified = result.unverified || [];
 
   const block = [
     '',
@@ -637,6 +712,11 @@ function writeFindings(vault, result, options = {}) {
     `  created: ${result.created.length}`,
     `  relocated: ${result.relocated.length}`,
     `  retired: ${result.moved.length}`,
+    // The ledger is the record of what a run did to the vault, so it also has
+    // to carry what a run DECLINED to do and why -- a retirement that did not
+    // happen is invisible everywhere else once the terminal output is gone.
+    `  unverified: ${unverified.length}`,
+    ...unverified.map((u) => `  - ${u.title} (${u.reason})`),
     `  renamed: ${result.renamed.length}`,
     `  unchanged: ${result.unchanged}`,
     `  conflicts: ${conflicts.length}`,
@@ -703,7 +783,13 @@ function applyPlan(vault, options = {}) {
 
   if (inventory.length === 0) throw new EmptyInventoryError();
 
-  const plan = diffLibrary(inventory, notes);
+  const rawPlan = diffLibrary(inventory, notes);
+  // Split BEFORE the caps: both the mass-change ceiling and the retire cap must
+  // compare against the number of notes that would actually be moved, not
+  // against a count inflated by skills nobody ever looked for. Otherwise the
+  // #90 shape does not merely mislabel notes, it aborts the whole run on a cap.
+  const { verified, unverified } = verifyRetirements(rawPlan.retired);
+  const plan = { ...rawPlan, retired: verified };
 
   const touched = plan.created.length + plan.relocated.length
     + plan.retired.length + plan.renamed.length;
@@ -883,6 +969,7 @@ function applyPlan(vault, options = {}) {
     return {
       created: [], relocated: [], moved: [], renamed: [],
       unchanged: unclaimedByRename(plan.unchanged, plan.renamed).length,
+      unverified,
       planned: writes.length + moves.length + renames.length,
       // CARRIED RULING 2: conflicts ride along even in preview, so a report
       // (or a human reading the preview) can name every note that was left
@@ -927,6 +1014,7 @@ function applyPlan(vault, options = {}) {
     created: writes.filter((w) => w.kind === 'create').map((w) => w.file),
     relocated: writes.filter((w) => w.kind === 'relocate').map((w) => w.file),
     moved: moves.map((m) => m.to),
+    unverified,
     renamed: renames.map((r) => r.to),
     // writeFindings (Task 9) reads this as a number. Returning the bucket itself
     // here would put a shape mismatch one task downstream of where it was made.
@@ -948,7 +1036,7 @@ module.exports = {
   applyPlan, MassChangeError, EmptyInventoryError,
   LibraryPathNotConfiguredError, LibraryDirectoryMissingError, RetireCapError,
   IndexMalformedError, IndexRowLossError,
-  rebuildIndex, writeFindings,
+  rebuildIndex, writeFindings, verifyRetirements,
   UsageError, parseApplyFlags, renderApplyPreview, renderApplyResult,
 };
 

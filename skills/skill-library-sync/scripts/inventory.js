@@ -34,8 +34,15 @@ function skillsIn(skillsDir) {
     }
     throw new Error(`skills directory is not readable at ${skillsDir}: ${err.message}`);
   }
+  // A SYMLINK is accepted alongside a real directory: readdirSync reports
+  // isDirectory() === false for one, and dropping it made the repo's own
+  // documented direct-symlink install mode invisible to the inventory -- which
+  // is not a cosmetic gap, because a skill missing from the inventory is a
+  // skill the apply path retires. The SKILL.md test below follows the link and
+  // is what actually decides: a dangling link, or one pointing at a file or at
+  // a directory without a SKILL.md, still yields nothing.
   return entries
-    .filter((e) => e.isDirectory())
+    .filter((e) => e.isDirectory() || e.isSymbolicLink())
     .map((e) => path.join(skillsDir, e.name))
     .filter((d) => fs.existsSync(path.join(d, 'SKILL.md')));
 }

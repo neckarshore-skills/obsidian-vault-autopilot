@@ -41,11 +41,21 @@ write only after the user confirms.
    user's: carried through a rewrite verbatim, as lines, never re-serialised.
    The origin tag has to be owned rather than carried, because a relocate can
    change `herkunft` and a stale `Skill/<old>` must not survive.
-2. **No filesystem discovery.** Only paths the config names or that
-   `installed_plugins.json` names. Never a tree walk. Outside the vault this skill
-   is read-only, always.
+2. **No filesystem discovery.** Only paths the config names, that
+   `installed_plugins.json` names, or that a library note records in its own `ort`
+   (fence 4). Never a tree walk, never a glob, never auto-detection. Outside the
+   vault this skill is read-only, always.
 3. **Nothing is deleted.** A skill that vanished gets `status: entfallen` and moves
    to the retired subfolder.
+4. **A retirement means the skill was looked for.** Before a note is retired, the
+   single path that note records in its `ort` frontmatter is checked for a
+   `SKILL.md` - one stat call per candidate, no search, never a write. A skill
+   still sitting at its recorded location is never retired; it is reported as
+   `unverified` and left exactly where it is. This is the third named source and
+   it is listed here rather than left implicit: an empty `source_roots` is the
+   absence of evidence, not evidence of absence, and a library whose job is
+   telling you what you have must not use its own silence to declare five live
+   skills gone.
 
 ## Shared conventions
 
@@ -64,8 +74,15 @@ Prints how many skills exist and how many notes describe them. Writes nothing.
 
     node "${CLAUDE_PLUGIN_ROOT}/skills/skill-library-sync/scripts/cli.js" diff "$OBSIDIAN_VAULT_PATH"
 
-Prints the four buckets - created, relocated, retired, renamed - plus conflicts,
-each with a count, and names every note that would change. Writes nothing.
+Prints the four buckets - created, relocated, retired, renamed - plus
+`unverified` and conflicts, each with a count, and names every note that would
+change. Writes nothing.
+
+`unverified` is the fence-4 bucket: notes the run declined to retire, each with
+its reason. `skill-still-at-recorded-location` means the skill is on disk and
+the note is right - configure a `source_root` so the inventory can see it.
+`no-recorded-location` means the note itself has no `ort` to check - repair the
+note.
 
 Show this output to the user. Do not proceed without an explicit confirmation.
 
@@ -138,6 +155,7 @@ Every refusal and guard error prints its message to stderr.
     - Relocated N notes
     - Retired N notes to <subfolder>
     - Renamed N notes (origin suffix)
+    - Declined to retire N notes (unverified - reason per note)
 
     ### Unchanged
     - N notes already matched the inventory
@@ -150,7 +168,8 @@ Every refusal and guard error prints its message to stderr.
 Every `apply --write` run appends a block to
 `${OBSIDIAN_VAULT_PATH}/_vault-autopilot/findings/<date>-skill-library-sync.md`:
 a `## Run HH:MM` heading, then a `counts:` list (created, relocated, retired,
-renamed, unchanged, conflicts) and one line per conflict. This records that a run
+unverified, renamed, unchanged, conflicts), one line per unverified note with
+its reason, and one line per conflict. This records that a run
 happened and what it touched - it does not classify individual findings by
 severity.
 
