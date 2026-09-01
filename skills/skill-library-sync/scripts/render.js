@@ -1,7 +1,7 @@
 'use strict';
 // render.js — pure rendering of a Skill Library note and of the index.
 
-const { NOTES_HEADING, STUB } = require('./library.js');
+const { NOTES_HEADING, STUB, frontmatterBlocks, listItems } = require('./library.js');
 
 const DESCRIPTION_CAP = 500;
 
@@ -24,7 +24,39 @@ function yamlString(value) {
   return `"${String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 }
 
-function renderNote(entry, notesZone) {
+// The keys this renderer OWNS: it derives them from the inventory, so it also
+// replaces them. Everything else in a note's frontmatter is the user's.
+const OWNED_KEYS = new Set([
+  'title', 'type', 'description', 'herkunft', 'ort', 'plugin', 'status',
+  'created', 'last_modified', 'tags',
+]);
+
+// `Claude/ClaudeCode` and `Skill/<herkunft>` are generated. The origin tag has
+// to be OWNED rather than carried: a relocate can change `herkunft`, and a
+// carried-through `Skill/extern` would leave the note tagged with an origin it
+// no longer has. Owning these two is exactly what makes carrying the rest safe.
+function isGeneratedTag(tag) {
+  return tag === 'Claude/ClaudeCode' || /^Skill\//.test(tag);
+}
+
+// Splits an existing note's frontmatter into what this renderer must carry
+// through: every block it does not own, verbatim, plus the tags that are not
+// generated. Issue #91 -- a create or relocate used to replace the whole block,
+// so a user's own key or tag was gone with no conflict, no warning, exit 0.
+function carryFrontmatter(frontmatterRaw) {
+  const blocks = frontmatterBlocks(frontmatterRaw);
+  const tagBlock = blocks.find((b) => b.key === 'tags');
+  return {
+    extraBlocks: blocks.filter((b) => !OWNED_KEYS.has(b.key)),
+    userTags: tagBlock ? listItems(tagBlock).filter((t) => !isGeneratedTag(t)) : [],
+  };
+}
+
+// `carry` is optional: a CREATE has no prior note, and passing nothing must
+// render exactly what this function rendered before (162 notes in the real
+// library carry nothing extra -- rewriting them differently would produce a
+// diff on every one of them for no reason).
+function renderNote(entry, notesZone, carry) {
   const title = noteTitle(entry);
   const description = fitDescription(entry.description);
   const zone = notesZone && notesZone.trim() ? notesZone : `\n\n${STUB}\n`;
@@ -39,9 +71,15 @@ function renderNote(entry, notesZone) {
     `status: ${entry.status}`,
     `created: ${entry.created}`,
     `last_modified: ${entry.lastModified}`,
+    // The user's own keys sit between the generated scalars and `tags`, which
+    // is where this vault's own convention puts custom fields -- tags always
+    // last. Carried as LINES, never re-serialised: a value this code does not
+    // understand survives unexamined.
+    ...(carry && carry.extraBlocks ? carry.extraBlocks.flatMap((b) => b.lines) : []),
     'tags:',
     '  - Claude/ClaudeCode',
     `  - Skill/${entry.herkunft}`,
+    ...(carry && carry.userTags ? carry.userTags.map((t) => `  - ${t}`) : []),
     '---',
   ].join('\n');
   const body = [
@@ -131,4 +169,7 @@ function renderIndex(rows) {
   return out.join('\n');
 }
 
-module.exports = { renderNote, renderIndex, noteTitle, fitDescription, DESCRIPTION_CAP };
+module.exports = {
+  renderNote, renderIndex, noteTitle, fitDescription, DESCRIPTION_CAP,
+  carryFrontmatter, OWNED_KEYS, isGeneratedTag,
+};

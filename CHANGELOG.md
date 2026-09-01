@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 For implementation detail and internal release notes, see [`logs/changelog.md`](logs/changelog.md).
 
+## [Unreleased]
+
+### Fixed
+
+- **`skill-library-sync` no longer discards your own frontmatter and tags** (#91). A relocate or rename replaced the whole frontmatter block, so any key you had added and any tag beyond the two generated ones vanished — no conflict, no warning, exit 0. The skill now owns only the fields it derives from the inventory (`title`, `type`, `description`, `herkunft`, `ort`, `plugin`, `status`, `created`, `last_modified`, and the `Claude/ClaudeCode` + `Skill/<origin>` tags) and carries everything else through verbatim, as lines, so a value it does not understand survives unexamined. The origin tag stays owned: a relocate can change the origin, and a stale one must not survive. A note with nothing extra renders byte-for-byte as before.
+
 ## [0.4.0] — 2026-08-26
 
 ### Added

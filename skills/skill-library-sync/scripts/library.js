@@ -47,6 +47,7 @@ function parseNote(text) {
   if (idx === -1) {
     return {
       frontmatter, machineBody: rest, notesZone: '',
+      frontmatterRaw: fmMatch ? fmMatch[1] : '',
       hasFrontmatter: Boolean(fmMatch), hasNotesHeading: false,
     };
   }
@@ -54,6 +55,12 @@ function parseNote(text) {
     frontmatter,
     machineBody: rest.slice(0, idx),
     notesZone: rest.slice(idx + NOTES_HEADING.length),
+    // The RAW frontmatter block, kept beside the parsed map because the map is
+    // lossy by design: its `key: value` regex cannot represent a list, so
+    // `tags:` reads as an empty string and its items vanish. Anything that has
+    // to CARRY a user's frontmatter through a rewrite (issue #91) needs the
+    // lines, not the map.
+    frontmatterRaw: fmMatch ? fmMatch[1] : '',
     // `frontmatter` being empty does not mean there was no frontmatter block
     // (`---\n---` parses to zero keys), and the two states are not
     // interchangeable to a caller deciding whether a note ever opted into the
@@ -71,4 +78,39 @@ function isReplaceableZone(notesZone) {
   return trimmed === '' || trimmed === STUB;
 }
 
-module.exports = { NOTES_HEADING, STUB, parseNote, isReplaceableZone };
+// Groups a raw frontmatter block into ordered (key, lines) blocks, where a
+// block is a column-0 `key:` line plus every following line that is indented or
+// a list item. Deliberately NOT a YAML parser: the lines are carried through
+// verbatim, so a value this code does not understand -- a nested map, a
+// multi-line string, a wikilink list -- survives a rewrite unexamined and
+// unchanged. Understanding it would be the larger risk.
+//
+// A line before the first key (or any line this shape does not recognise)
+// attaches to the block above it, so nothing is silently dropped on the floor.
+function frontmatterBlocks(raw) {
+  const blocks = [];
+  for (const line of String(raw || '').split(/\r?\n/)) {
+    const m = line.match(/^([A-Za-z_][A-Za-z0-9_-]*): ?(.*)$/);
+    if (m) {
+      blocks.push({ key: m[1], lines: [line] });
+    } else if (blocks.length) {
+      blocks[blocks.length - 1].lines.push(line);
+    }
+  }
+  return blocks;
+}
+
+// The items of a `- item` list block, unquoted the same way parseNote unquotes
+// a scalar. Used for the tag union; returns [] for a scalar block.
+function listItems(block) {
+  const out = [];
+  for (const line of block.lines.slice(1)) {
+    const m = line.match(/^ *- *(.+?) *$/);
+    if (m) out.push(m[1].replace(/^["']|["']$/g, ''));
+  }
+  return out;
+}
+
+module.exports = {
+  NOTES_HEADING, STUB, parseNote, isReplaceableZone, frontmatterBlocks, listItems,
+};
