@@ -200,3 +200,35 @@ test('a skipped entry is named on stderr, not swallowed', () => {
   assert.ok(lines.some((l) => l.includes('no-path@vendor')),
     `the skipped entry was not named; stderr was:\n${lines.join('\n')}`);
 });
+
+// A skill installed as a SYMLINK into ~/.claude/skills is the repo's own
+// documented "direct-symlink mode" (CLAUDE.md, Production Vault Safety rule 6).
+// readdirSync(withFileTypes) reports isDirectory() === false for a symlink, so
+// the whole install mode was invisible to the inventory -- and a skill missing
+// from the inventory is a skill the apply path RETIRES. Measured on the live
+// machine 2026-09-01: `diagram-design` is exactly this case and appears on
+// issue #90's "genuinely gone" list while sitting on disk.
+test('a symlinked skill directory is found, not silently dropped', () => {
+  const f = fixture();
+  const elsewhere = path.join(f.root, 'elsewhere');
+  const real = skill(elsewhere, 'diagram-design', 'draws diagrams');
+  fs.symlinkSync(real, path.join(f.own, 'diagram-design'));
+
+  const inv = buildInventory({
+    ownSkillsDir: f.own,
+    installedPluginsPath: f.installed,
+    sourceRoots: [],
+  });
+  const names = inv.map((e) => e.name);
+  assert.ok(names.includes('diagram-design'),
+    `symlinked skill missing from inventory; got: ${names.join(', ')}`);
+});
+
+test('a symlink that does not resolve to a skill is not counted', () => {
+  const f = fixture();
+  fs.symlinkSync(path.join(f.root, 'nowhere'), path.join(f.own, 'dangling'));
+  const inv = buildInventory({
+    ownSkillsDir: f.own, installedPluginsPath: f.installed, sourceRoots: [],
+  });
+  assert.ok(!inv.map((e) => e.name).includes('dangling'));
+});
