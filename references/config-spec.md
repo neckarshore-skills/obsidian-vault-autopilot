@@ -145,3 +145,60 @@ How many of the 40 attributes affect each skill:
 | **tag-manage** | 7 | 2 | 5 | **14** |
 
 7 of 11 Tier 1 attributes and 5 Tier 2/3 attributes are **global** — they affect all 7 skills (4 launch-scope + 3 roadmap). The configuration infrastructure is a plugin-level feature, not a single-skill feature.
+
+---
+
+## skill-library-sync
+
+These three keys are **not** part of the 40 tiered attributes above and are not counted in the summary table. They configure one skill only, and they are shaped differently from every other section in this file — read the shape note before writing them.
+
+### The shape is keyed, not bare
+
+Every section above puts **bare** keys inside its fence under an H2 heading (`## Folders` → `inbox: "Inbox"`). This section does not. The reader looks for the literal line `skill_library:` at column 0 inside a ```yaml fence, with its children indented below it. Written in the house style, the block is silently treated as absent.
+
+| # | Key | Default | Type | Description |
+|---|-----|---------|------|-------------|
+| 1 | `library_path` | *(empty)* | Path, vault-relative | Folder holding the Skill Library notes. Not home-expanded — it is a path inside the vault, not on disk. Empty means unconfigured; see the warning below. |
+| 2 | `retired_subfolder` | `Entfallen` | String | Subfolder under `library_path` that retired notes are moved into. Never deleted, only relocated and re-labelled. |
+| 3 | `source_roots` | `[]` | List | Additional repository roots whose `skills/` subdirectory holds skills that are not installed as plugins. `~` is expanded. Additive by construction — see below. |
+
+Two source classes are **always** read and cannot be configured away: `~/.claude/skills/` and every install path in `installed_plugins.json`. `source_roots` only adds to them, which is why the `_extend` / `_override` semantics documented at the top of this file do not apply here.
+
+### Config File Example
+
+The `## Global` fence below is present on purpose: it proves the two shapes coexist. The reader scans every yaml fence and takes the first one containing `skill_library:` at column 0.
+
+````markdown
+## Global
+
+```yaml
+cooldown_days: 0
+```
+
+## skill-library-sync
+
+```yaml
+skill_library:
+  library_path: "020_Processes/Library Meta/Skill Library"
+  retired_subfolder: "Entfallen"
+  source_roots:
+    - "~/Developer/projects/neckarshore-skills/photo-autopilot"
+    - "~/Developer/projects/neckarshore-skills/social-scrapers"
+```
+````
+
+### What silence means here
+
+> **Warning:** Every malformed shape in this section is treated as **absent**, never as an error. A broken config file must not be able to stop a read-only scan — but that means a typo does not announce itself, it just changes what the skill believes about your vault. Each row below was measured against the reader, not read off the code.
+
+| # | What you write | What the reader sees | Consequence |
+|---|----------------|----------------------|-------------|
+| 1 | No config file at all | `library_path: ''` | The whole vault becomes the candidate surface. This is [#93](https://github.com/neckarshore-skills/obsidian-vault-autopilot/issues/93). |
+| 2 | List items at 2 spaces (`  - "~/a"`) | Empty `source_roots` | Valid YAML, silently dropped. This is the most likely hand-written form. Items need **exactly 4** spaces. |
+| 3 | `source_roots_override:` | Empty `source_roots` | Not a recognized key. Every configured root is lost. |
+| 4 | `source_roots_extend:` | Identical to `source_roots` | Accepted as a synonym, not as different semantics. |
+| 5 | Scalars at 1 or 3 spaces | Key absent | Scalars need **exactly 2** spaces. |
+| 6 | Tab indentation | Key absent | Tabs are not recognized at any depth. |
+| 7 | Inline list (`source_roots: ["~/a"]`) | Empty `source_roots` | Flow-style lists are not recognized. |
+
+An empty `source_roots` is the absence of evidence, not evidence of absence. The skill treats it that way: a library whose job is telling you what you have must not use its own silence to declare live skills gone.
