@@ -194,7 +194,7 @@ skill_library:
 | # | What you write | What the reader sees | Consequence |
 |---|----------------|----------------------|-------------|
 | 1 | No config file at all | `library_path: ''` | The whole vault becomes the candidate surface. This is [#93](https://github.com/neckarshore-skills/obsidian-vault-autopilot/issues/93). |
-| 2 | List items at 2 spaces (`  - "~/a"`) | Empty `source_roots` | Valid YAML, silently dropped. This is the most likely hand-written form. Items need **exactly 4** spaces. |
+| 2 | List items indented by 2 spaces (a `- "~/a"` item aligned with `source_roots:`) | Empty `source_roots` | Valid YAML, silently dropped. This is the most likely hand-written form. Items need **exactly 4** spaces. |
 | 3 | `source_roots_override:` | Empty `source_roots` | Not a recognized key. Every configured root is lost. |
 | 4 | `source_roots_extend:` | Identical to `source_roots` | Accepted as a synonym, not as different semantics. |
 | 5 | Scalars at 1 or 3 spaces | Key absent | Scalars need **exactly 2** spaces. |
