@@ -1,7 +1,7 @@
 ---
 name: property-classify
 status: beta
-description: Use when Obsidian vault notes need their `status` and `type` frontmatter properties set or audited. Trigger phrases - "set note types", "check status", "classify notes", "status audit", "type audit", "lifecycle check", "draft notes", "assign types". Also trigger when notes have `type: TBD` or no status field, or when the user wants to know which notes need attention based on completeness.
+description: Use when Obsidian vault notes need their `status` and `type` frontmatter properties set or audited. Trigger phrases - "set note types", "check status", "classify notes", "status audit", "type audit", "lifecycle check", "draft notes", "assign types". Also trigger when notes carry a `type` of `TBD` or no status field, or when the user wants to know which notes need attention based on completeness.
 ---
 
 # Property Classify
