@@ -88,12 +88,85 @@ frontmatter() {
        { print }' "$1"
 }
 
-# `description:` value, including any continuation lines up to the block end.
-description_value() {
-  printf '%s\n' "$1" | awk '/^description:/ { f=1; sub(/^description:[[:space:]]*/, ""); print; next }
-                            f && /^[a-z_][a-z0-9_-]*:/ { exit }
-                            f { print }'
+# ─── The block must be VALID YAML, not merely delimited ─────────────────────
+# Raised by CodeRabbit on PR #102 and correct: until this existed, the gate
+# greped the block and reported "frontmatter block parses" without ever
+# parsing it. `description: [` is a delimited block, matches `name:`, carries
+# quoted phrases — and is unparseable YAML, so Claude Code does not load the
+# skill AT ALL. For a skills product that is the worst failure mode there is:
+# total, silent, and invisible in the file. The old wording was the same
+# overclaim this gate was written to close, one layer further down.
+#
+# `name`, `description` and `status` are read as PARSED SCALARS from here on,
+# never as grep hits, and the trigger count runs over the parsed string.
+#
+# Parser availability is FAIL-CLOSED AND LOUD (see require_yaml_parser): a gate
+# that skips itself when its parser is missing is the decorative-green class
+# wearing a dependency for a hat.
+skill_report() {
+  python3 - "$1" <<'PYEOF' 2>&1
+import sys, yaml
+
+path = sys.argv[1]
+try:
+    text = open(path, encoding="utf-8").read()
+except Exception as exc:                       # unreadable / undecodable
+    print("ERR=cannot read file: %s" % exc); sys.exit(0)
+
+lines = text.split("\n")
+if not lines or lines[0].strip() != "---":
+    print("ERR=line 1 is not the `---` delimiter"); sys.exit(0)
+try:
+    end = lines.index("---", 1)
+except ValueError:
+    print("ERR=no closing `---` delimiter"); sys.exit(0)
+
+block = "\n".join(lines[1:end])
+try:
+    data = yaml.safe_load(block)
+except yaml.YAMLError as exc:
+    print("ERR=frontmatter is not valid YAML: %s" % str(exc).replace("\n", " ")[:160])
+    sys.exit(0)
+
+if data is None:
+    print("ERR=frontmatter block is delimited but empty"); sys.exit(0)
+if not isinstance(data, dict):
+    print("ERR=frontmatter is valid YAML but not a mapping (%s)" % type(data).__name__)
+    sys.exit(0)
+
+def scalar(key):
+    if key not in data:
+        return "absent", ""
+    v = data[key]
+    if v is None:
+        return "null", ""
+    if not isinstance(v, (str, int, float, bool)):
+        return "nonscalar", type(v).__name__
+    v = str(v).strip()
+    return ("empty", "") if not v else ("value", v)
+
+print("OK=1")
+for key in ("name", "description", "status"):
+    state, val = scalar(key)
+    print("%s_STATE=%s" % (key.upper(), state))
+    if key != "description":
+        print("%s=%s" % (key.upper(), val))
+state, desc = scalar("description")
+print("TRIGGERS=%d" % (desc.count('"') // 2 if state == "value" else 0))
+PYEOF
 }
+
+require_yaml_parser() {
+  python3 -c 'import yaml' >/dev/null 2>&1 && return 0
+  echo "FAIL: python3 with PyYAML is required — the frontmatter block cannot be"
+  echo "      validated without a parser, and a gate that skips itself when its"
+  echo "      parser is missing reports green over unchecked files."
+  echo
+  echo "test-skill-frontmatter: checked 0 skills, 0 passed, 1 failed"
+  exit 1
+}
+
+require_yaml_parser
 
 # ─── Derive the subject set from the filesystem, never from a name list ──────
 SKILL_FILES=""
@@ -132,48 +205,64 @@ while IFS= read -r skill; do
     fail "$name: no parseable YAML frontmatter block (needs \`---\` on line 1 and a closing \`---\`)"
     continue
   fi
-  fm="$(frontmatter "$skill")"
-  if [ -z "$fm" ]; then
-    fail "$name: frontmatter block is delimited but empty"
-    continue
-  fi
-  ok "$name: frontmatter block parses"
 
-  # (1) name: present and equal to the directory it lives in.
-  declared="$(printf '%s\n' "$fm" | grep -m1 '^name:' | sed 's/^name:[[:space:]]*//' | sed 's/[[:space:]]*$//')"
-  if [ -z "$declared" ]; then
-    fail "$name: no \`name:\` in frontmatter"
-  elif [ "$declared" != "$name" ]; then
-    fail "$name: \`name: $declared\` does not match its directory \`skills/$name/\`"
-  else
-    ok "$name: \`name:\` matches its directory"
-  fi
+  # (1) The block must be VALID YAML and a mapping. Everything below reads
+  #     PARSED SCALARS from this report, never grep hits.
+  report="$(skill_report "$skill")"
+  case "$report" in
+    ERR=*) fail "$name: ${report#ERR=}"; continue ;;
+    OK=1*) ok "$name: frontmatter parses as a YAML mapping" ;;
+    *)     fail "$name: frontmatter probe produced no verdict — ${report:-<empty>}"; continue ;;
+  esac
+  field() { printf '%s\n' "$report" | grep -m1 "^$1=" | cut -d= -f2-; }
 
-  # (2) description: present and non-empty.
-  desc="$(description_value "$fm")"
-  desc_stripped="$(printf '%s' "$desc" | tr -d '[:space:]')"
-  if [ -z "$desc_stripped" ]; then
-    fail "$name: \`description:\` missing or empty — this is what Claude Code matches on"
-    continue
-  fi
-  ok "$name: \`description:\` present and non-empty"
+  # (2) name: present, a scalar, and equal to the directory it lives in.
+  case "$(field NAME_STATE)" in
+    value)
+      declared="$(field NAME)"
+      if [ "$declared" != "$name" ]; then
+        fail "$name: \`name: $declared\` does not match its directory \`skills/$name/\`"
+      else
+        ok "$name: \`name:\` matches its directory"
+      fi ;;
+    absent)    fail "$name: no \`name:\` in frontmatter" ;;
+    null)      fail "$name: \`name:\` is present but null" ;;
+    empty)     fail "$name: \`name:\` is present but empty" ;;
+    nonscalar) fail "$name: \`name:\` is not a scalar" ;;
+  esac
 
-  # (3) At least MIN_TRIGGERS quoted trigger phrases in the description.
-  triggers="$(printf '%s' "$desc" | grep -o '"[^"]*"' | wc -l | tr -d ' ')"
-  if [ "$triggers" -lt "$MIN_TRIGGERS" ]; then
-    fail "$name: only ${triggers} quoted trigger phrase(s) in \`description:\`, convention is ${MIN_TRIGGERS}+"
+  # (3) description: present and non-empty — this is what Claude Code matches on.
+  case "$(field DESCRIPTION_STATE)" in
+    value)     ok "$name: \`description:\` present and non-empty" ;;
+    absent)    fail "$name: no \`description:\` in frontmatter — this is what Claude Code matches on"; continue ;;
+    null)      fail "$name: \`description:\` is present but null"; continue ;;
+    empty)     fail "$name: \`description:\` is present but empty"; continue ;;
+    nonscalar) fail "$name: \`description:\` is not a scalar"; continue ;;
+  esac
+
+  # (4) At least MIN_TRIGGERS quoted trigger phrases, counted over the PARSED
+  #     description — not over the raw block, which would swallow the body.
+  triggers="$(field TRIGGERS)"
+  if [ "${triggers:-0}" -lt "$MIN_TRIGGERS" ]; then
+    fail "$name: only ${triggers:-0} quoted trigger phrase(s) in \`description:\`, convention is ${MIN_TRIGGERS}+"
   else
     ok "$name: ${triggers} quoted trigger phrases (>= ${MIN_TRIGGERS})"
   fi
 
-  # (4) status: optional, but constrained when present. See header note.
-  status="$(printf '%s\n' "$fm" | grep -m1 '^status:' | sed 's/^status:[[:space:]]*//' | sed 's/[[:space:]]*$//')"
-  if [ -n "$status" ]; then
-    case "$status" in
-      beta|stable) ok "$name: \`status: $status\`" ;;
-      *) fail "$name: \`status: $status\` is not one of beta|stable" ;;
-    esac
-  fi
+  # (5) status: OPTIONAL (nothing consumes it — see header). An ABSENT key and a
+  #     PRESENT-but-empty/null one are different facts and are reported as such.
+  case "$(field STATUS_STATE)" in
+    absent)    : ;;
+    value)
+      status="$(field STATUS)"
+      case "$status" in
+        beta|stable) ok "$name: \`status: $status\`" ;;
+        *)           fail "$name: \`status: $status\` is not one of beta|stable" ;;
+      esac ;;
+    null)      fail "$name: \`status:\` is present but null — omit the key or give it a value" ;;
+    empty)     fail "$name: \`status:\` is present but empty — omit the key or give it a value" ;;
+    nonscalar) fail "$name: \`status:\` is not a scalar" ;;
+  esac
 done <<EOF
 $SKILL_FILES
 EOF
