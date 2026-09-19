@@ -104,63 +104,74 @@ frontmatter() {
 # that skips itself when its parser is missing is the decorative-green class
 # wearing a dependency for a hat.
 skill_report() {
-  python3 - "$1" <<'PYEOF' 2>&1
-import sys, yaml
+  ruby -ryaml - "$1" <<'RBEOF' 2>&1
+path = ARGV[0]
+begin
+  text = File.read(path, encoding: "UTF-8")
+rescue => e
+  puts "ERR=cannot read file: #{e.message}"; exit 0
+end
 
-path = sys.argv[1]
-try:
-    text = open(path, encoding="utf-8").read()
-except Exception as exc:                       # unreadable / undecodable
-    print("ERR=cannot read file: %s" % exc); sys.exit(0)
+lines = text.split("\n", -1)
+if lines.empty? || lines[0].strip != "---"
+  puts "ERR=line 1 is not the `---` delimiter"; exit 0
+end
+close = lines.each_with_index.drop(1).find { |l, _| l == "---" }
+if close.nil?
+  puts "ERR=no closing `---` delimiter"; exit 0
+end
 
-lines = text.split("\n")
-if not lines or lines[0].strip() != "---":
-    print("ERR=line 1 is not the `---` delimiter"); sys.exit(0)
-try:
-    end = lines.index("---", 1)
-except ValueError:
-    print("ERR=no closing `---` delimiter"); sys.exit(0)
+block = lines[1...close[1]].join("\n")
+begin
+  data = YAML.safe_load(block)
+rescue Psych::SyntaxError => e
+  puts "ERR=frontmatter is not valid YAML: #{e.message.gsub(/\s+/, ' ')[0, 160]}"; exit 0
+rescue Psych::DisallowedClass => e
+  puts "ERR=frontmatter uses a non-string type the contract does not allow: #{e.message[0, 120]}"; exit 0
+end
 
-block = "\n".join(lines[1:end])
-try:
-    data = yaml.safe_load(block)
-except yaml.YAMLError as exc:
-    print("ERR=frontmatter is not valid YAML: %s" % str(exc).replace("\n", " ")[:160])
-    sys.exit(0)
+if data.nil?
+  puts "ERR=frontmatter block is delimited but empty"; exit 0
+end
+unless data.is_a?(Hash)
+  puts "ERR=frontmatter is valid YAML but not a mapping (#{data.class})"; exit 0
+end
 
-if data is None:
-    print("ERR=frontmatter block is delimited but empty"); sys.exit(0)
-if not isinstance(data, dict):
-    print("ERR=frontmatter is valid YAML but not a mapping (%s)" % type(data).__name__)
-    sys.exit(0)
+def scalar(data, key)
+  return ["absent", ""] unless data.key?(key)
+  v = data[key]
+  return ["null", ""] if v.nil?
+  return ["nonscalar", v.class.to_s] unless v.is_a?(String) || v.is_a?(Numeric) || v == true || v == false
+  v = v.to_s.strip
+  v.empty? ? ["empty", ""] : ["value", v]
+end
 
-def scalar(key):
-    if key not in data:
-        return "absent", ""
-    v = data[key]
-    if v is None:
-        return "null", ""
-    if not isinstance(v, (str, int, float, bool)):
-        return "nonscalar", type(v).__name__
-    v = str(v).strip()
-    return ("empty", "") if not v else ("value", v)
-
-print("OK=1")
-for key in ("name", "description", "status"):
-    state, val = scalar(key)
-    print("%s_STATE=%s" % (key.upper(), state))
-    if key != "description":
-        print("%s=%s" % (key.upper(), val))
-state, desc = scalar("description")
-print("TRIGGERS=%d" % (desc.count('"') // 2 if state == "value" else 0))
-PYEOF
+puts "OK=1"
+%w[name description status].each do |key|
+  state, val = scalar(data, key)
+  puts "#{key.upcase}_STATE=#{state}"
+  puts "#{key.upcase}=#{val}" unless key == "description"
+end
+dstate, desc = scalar(data, "description")
+puts "TRIGGERS=#{dstate == 'value' ? desc.count('"') / 2 : 0}"
+RBEOF
 }
 
+# Ruby ships YAML (Psych) in its STANDARD LIBRARY, so the gate needs no
+# dependency install and matches this repo's stdlib-only convention — the other
+# scripts/*.py import nothing but `re`, `sys` and `pathlib`.
+#
+# The first version used python3 + PyYAML and CI answered in 20 seconds: PyYAML
+# is NOT on the macos-latest runner, so `assertion-suites` went red with the
+# message below. That is the fail-closed design working, not a mishap — a gate
+# that had SKIPPED itself on a missing parser would have reported green over
+# eleven unchecked files, which is the exact class this PR exists to close.
 require_yaml_parser() {
-  python3 -c 'import yaml' >/dev/null 2>&1 && return 0
-  echo "FAIL: python3 with PyYAML is required — the frontmatter block cannot be"
-  echo "      validated without a parser, and a gate that skips itself when its"
-  echo "      parser is missing reports green over unchecked files."
+  ruby -ryaml -e 'YAML.safe_load("a: 1")' >/dev/null 2>&1 && return 0
+  echo "FAIL: ruby with the YAML (Psych) standard library is required — the"
+  echo "      frontmatter block cannot be validated without a parser, and a gate"
+  echo "      that skips itself when its parser is missing reports green over"
+  echo "      unchecked files."
   echo
   echo "test-skill-frontmatter: checked 0 skills, 0 passed, 1 failed"
   exit 1
