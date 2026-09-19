@@ -58,12 +58,34 @@ CHECKED=0
 ok()   { echo "  PASS: $*"; PASS=$((PASS+1)); }
 fail() { echo "  FAIL: $*"; FAIL=$((FAIL+1)); }
 
-# Lines between the first and second `---`, empty if the block is malformed.
-frontmatter() {
+# A well-formed block is `---` on line 1 AND a later closing `---`. This is an
+# EXPLICIT PRECONDITION, checked before the extractor runs, not an emergent
+# property of it: an awk that stops at the closing delimiter simply prints to
+# EOF when there is none, and every downstream assertion then goes green over a
+# file Claude Code cannot parse. Measured 2026-09-19 on the first draft of this
+# gate — stripping the closing `---` from tag-manage produced five PASSes and
+# inflated the trigger count from 16 to 66, because `description_value` ran off
+# into the markdown body. That is this repo's own gate falling into the class
+# the gate was written to close.
+# Single awk process ON PURPOSE. The first version was
+# `tail -n +2 "$1" | grep -qx -- '---'`, which fails under `set -o pipefail` for
+# a reason that has nothing to do with the file: `grep -q` exits at the first
+# match, SIGPIPEs `tail`, and pipefail turns that into a non-zero status. It
+# therefore went red on note-rename and tag-manage (larger files, tail still
+# writing) and green on inbox-sort (smaller, tail already done) — a gate whose
+# verdict tracked file size. Caught by re-running the gate after the fix.
+well_formed_block() {
   awk 'NR==1 && $0!="---" { exit }
-       NR==1 { inblock=1; next }
-       inblock && $0=="---" { exit }
-       inblock { print }' "$1"
+       NR==1 { next }
+       $0=="---" { closed=1; exit }
+       END { exit (closed ? 0 : 1) }' "$1"
+}
+
+# Lines between the first and second `---`. Only valid after well_formed_block.
+frontmatter() {
+  awk 'NR==1 { next }
+       $0=="---" { exit }
+       { print }' "$1"
 }
 
 # `description:` value, including any continuation lines up to the block end.
@@ -106,9 +128,13 @@ while IFS= read -r skill; do
     fail "$name: skills/$name/SKILL.md is empty"
     continue
   fi
+  if ! well_formed_block "$skill"; then
+    fail "$name: no parseable YAML frontmatter block (needs \`---\` on line 1 and a closing \`---\`)"
+    continue
+  fi
   fm="$(frontmatter "$skill")"
   if [ -z "$fm" ]; then
-    fail "$name: no parseable YAML frontmatter block (needs \`---\` on line 1 and a closing \`---\`)"
+    fail "$name: frontmatter block is delimited but empty"
     continue
   fi
   ok "$name: frontmatter block parses"
