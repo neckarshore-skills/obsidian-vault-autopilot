@@ -32,8 +32,8 @@
 #      for the cross-platform extraction.
 #   9. references/windows-preflight.md no longer contains a "Step 7" heading
 #      (the clone-cluster step was extracted) — Step 6 is the last step.
-#  10. The four launch-scope SKILL.md files (inbox-sort, note-rename,
-#      property-enrich, property-describe) invoke clone-preflight.md
+#  10. EVERY SKILL.md that declares a "## Pre-flight" section invokes
+#      clone-preflight.md
 #      UNCONDITIONALLY (i.e., the cross-platform invocation is not gated by
 #      "if running on Windows"). This is the v0.1.5 behavior contract: macOS
 #      and Linux users must see the WARN.
@@ -54,12 +54,20 @@ WINDOWS_CONSIDERATIONS="docs/windows-considerations.md"
 CLONING_GUIDE="docs/cloning-guide.md"
 CHANGELOG="logs/changelog.md"
 
-LAUNCH_SCOPE_SKILLS=(
-  "skills/inbox-sort/SKILL.md"
-  "skills/note-rename/SKILL.md"
-  "skills/property-enrich/SKILL.md"
-  "skills/property-describe/SKILL.md"
-)
+# shellcheck source=lib/skill-sets.sh
+. "$REPO_ROOT/scripts/lib/skill-sets.sh"
+
+# CONTRACT, not a pin: the subject set is every skill that declares a
+# Pre-flight section, derived at run time. Until 2026-09-21 this was a
+# hardcoded list of four while six skills carried the section — the two
+# uncovered ones (note-quality-check, property-classify) happened to satisfy
+# the contract, so the blindness cost nothing. It was still blindness.
+PREFLIGHT_SKILLS=()
+while IFS= read -r line; do
+  [ -n "$line" ] && PREFLIGHT_SKILLS+=("$line")
+done < <(preflight_skills)
+
+printf '%s\n' "${PREFLIGHT_SKILLS[@]}" | assert_preflight_floor || exit 1
 
 assert_path() {
   local path="$1"; local kind="$2"
@@ -234,12 +242,12 @@ refute_grep_re "^## Step 7" "$WINDOWS_PREFLIGHT"
 assert_grep "clone-preflight.md" "$WINDOWS_PREFLIGHT"
 
 # ---------------------------------------------------------------------------
-# 10. All 4 launch-scope SKILL.md files invoke clone-preflight UNCONDITIONALLY
-#     (not gated by Windows). This is the v0.1.5 behavior contract: macOS
-#     and Linux users must see the WARN.
+# 10. EVERY pre-flight skill invokes clone-preflight UNCONDITIONALLY (not
+#     gated by Windows). This is the v0.1.5 behavior contract: macOS and
+#     Linux users must see the WARN. Subject set derived, floor-checked.
 # ---------------------------------------------------------------------------
-echo "[10/10] 4 SKILL.md preflight blocks invoke clone-preflight unconditionally..."
-for skill in "${LAUNCH_SCOPE_SKILLS[@]}"; do
+echo "[10/10] ${#PREFLIGHT_SKILLS[@]} SKILL.md preflight blocks invoke clone-preflight unconditionally..."
+for skill in "${PREFLIGHT_SKILLS[@]}"; do
   assert_path "$skill" file
   # Must reference clone-preflight.md
   assert_grep "clone-preflight.md" "$skill"

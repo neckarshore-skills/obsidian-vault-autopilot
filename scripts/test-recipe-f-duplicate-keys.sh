@@ -164,8 +164,19 @@ grep -q "Exception — divergent-value abort path" "$SANITY" && ok "idempotency 
 # ─── Section [5/6] SKILL.md cross-references (4 launch-scope skills) ────────
 echo "[5/6] SKILL.md cross-references"
 
+# DELIBERATE PIN — do not convert this to the derived pre-flight set.
+# Measured 2026-09-21: note-quality-check declares a "## Pre-flight" section,
+# so it IS in that population, and it handles the recipe-(f) verdict family
+# correctly — but GROUPED (five corruption verdicts routed in one clause)
+# rather than per-verdict, so it names the verdict once and never names the
+# finding-category slug. The ">= 2 hits" threshold below measures the document
+# SHAPE of the four launch-scope skills, not the behavioural contract.
+# Deriving here would turn this gate red on a skill that does the right thing.
+# That residual — nothing asserts note-quality-check's grouped handling at all
+# — is a coverage gap filed as a finding, not something to paper over here.
 for skill in property-enrich note-rename inbox-sort property-describe; do
   SKILL_FILE="${REPO_ROOT}/skills/${skill}/SKILL.md"
+  [ -f "$SKILL_FILE" ] || { echo "  FAIL: pinned subject missing: $SKILL_FILE"; FAIL=$((FAIL+1)); continue; }
   # Count occurrences (not lines) — both strings often co-occur on one line.
   count=$(grep -oE "DUPLICATE_KEYS_DIVERGENT_VALUES|duplicate-key-divergent-values" "$SKILL_FILE" | wc -l | tr -d ' ')
   if [ "$count" -ge 2 ]; then

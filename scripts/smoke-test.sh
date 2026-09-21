@@ -78,7 +78,18 @@ normalize_for_diff() {
 
 # Collect skill → fixture mapping by reading expected/ directories.
 # Each skill's relevant fixtures = the fixtures that have an expected/ golden file.
-SKILLS=(property-enrich note-rename inbox-sort property-describe)
+# CONTRACT: the subject set is whatever has golden fixtures. Deriving it from
+# test-data/expected/ means a new fixture set is exercised the day it lands,
+# instead of on the day someone remembers to extend a list here.
+SKILLS=()
+for _d in "$REPO_ROOT"/test-data/expected/*/; do
+  [ -d "$_d" ] && SKILLS+=("$(basename "$_d")")
+done
+if [ ${#SKILLS[@]} -eq 0 ]; then
+  echo "FAIL: no fixture sets under test-data/expected/ — refusing to report a" >&2
+  echo "      green smoke test over an empty subject set." >&2
+  exit 1
+fi
 EXIT_CODE=0
 
 for SKILL in "${SKILLS[@]}"; do

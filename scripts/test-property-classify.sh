@@ -26,6 +26,12 @@ SANITY="${REPO_ROOT}/references/yaml-sanity.md"
 PASS=0
 FAIL=0
 
+# PIN by construction: this suite IS the property-classify suite. Naming its own subject is not a name-list
+# smell — but the pin still owes a fail-closed existence check, so a moved or
+# renamed SKILL.md fails as "missing file" rather than as a wall of misleading
+# content failures.
+[ -f "${SKILL}" ] || { echo "FAIL: pinned subject missing: ${SKILL}" >&2; exit 1; }
+
 ok()   { echo "  PASS: $*"; PASS=$((PASS+1)); }
 fail() { echo "  FAIL: $*"; FAIL=$((FAIL+1)); }
 
