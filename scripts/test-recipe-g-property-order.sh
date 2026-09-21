@@ -74,10 +74,16 @@ echo "[5/6] property-enrich SKILL.md integration"
 # fail-closed existence check, otherwise a renamed or deleted file reports
 # "missing finalize step" instead of "missing file".
 PE="${REPO_ROOT}/skills/property-enrich/SKILL.md"
-[ -f "$PE" ] || fail "pinned subject missing: $PE (renamed or deleted?)"
-grep -q "Finalize canonical property order (recipe g)" "$PE" && ok "property-enrich applies recipe (g) as finalize step" || fail "property-enrich missing recipe (g) finalize step"
-grep -q "Canonical property order" "$PE" && ok "property-enrich documents canonical order" || fail "property-enrich missing canonical-order section"
-grep -qF 'YYYY-MM-DD HH:MM' "$PE" && ok "property-enrich writes modified with HH:MM" || fail "property-enrich missing HH:MM modified format"
+# The check must GUARD, not merely count: `fail` records and returns, so an
+# unguarded grep against a missing file adds three misleading content failures
+# on top of the real one. (CodeRabbit, PR #103.)
+if [ -f "$PE" ]; then
+  grep -q "Finalize canonical property order (recipe g)" "$PE" && ok "property-enrich applies recipe (g) as finalize step" || fail "property-enrich missing recipe (g) finalize step"
+  grep -q "Canonical property order" "$PE" && ok "property-enrich documents canonical order" || fail "property-enrich missing canonical-order section"
+  grep -qF 'YYYY-MM-DD HH:MM' "$PE" && ok "property-enrich writes modified with HH:MM" || fail "property-enrich missing HH:MM modified format"
+else
+  fail "pinned subject missing: $PE (renamed or deleted?)"
+fi
 
 # ─── Section [6/6] Self-output standard (findings-file.md) ────────────────────
 echo "[6/6] Self-output standard (dogfooding)"
