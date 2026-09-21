@@ -161,7 +161,7 @@ grep -q "Pattern 5 — Duplicate-key detection" "$SANITY" && ok "Pattern 5 secti
 grep -qE "MULTIPLE_FRONTMATTER_BLOCKS.*UNCLOSED_FRONTMATTER.*INVALID_YAML.*DUPLICATE_KEYS_DIVERGENT_VALUES.*BROKEN_KEYS_INSIDE_COLON.*DUPLICATE_KEYS_IDENTICAL_VALUES" "$SANITY" && ok "verdict-priority ladder updated correctly" || fail "verdict-priority ladder missing or wrong order"
 grep -q "Exception — divergent-value abort path" "$SANITY" && ok "idempotency exception clause present" || fail "idempotency exception clause missing"
 
-# ─── Section [5/6] SKILL.md cross-references (4 launch-scope skills) ────────
+# ─── Section [5/6] SKILL.md cross-references (4 pinned + the grouped form) ──
 echo "[5/6] SKILL.md cross-references"
 
 # DELIBERATE PIN — do not convert this to the derived pre-flight set.
@@ -185,6 +185,38 @@ for skill in property-enrich note-rename inbox-sort property-describe; do
     fail "${skill}/SKILL.md missing new verdict references (${count} hits, need ≥ 2)"
   fi
 done
+
+# note-quality-check is in the pre-flight population but documents the recipe-(f)
+# verdict family in GROUPED form — five corruption verdicts routed in one clause
+# — so it scores 1 against the >= 2 threshold above and is correctly excluded
+# from that loop. Until 2026-09-21 that meant NOTHING asserted its handling at
+# all: the correct decision not to derive the threshold had left a live gap in a
+# shipped skill. This closes it on its own terms rather than by bending the
+# threshold to a shape the skill does not use.
+NQC="${REPO_ROOT}/skills/note-quality-check/SKILL.md"
+if [ -f "$NQC" ]; then
+  missing=""
+  for verdict in BROKEN_KEYS_INSIDE_COLON DUPLICATE_KEYS_DIVERGENT_VALUES \
+                 DUPLICATE_KEYS_IDENTICAL_VALUES MULTIPLE_FRONTMATTER_BLOCKS \
+                 UNCLOSED_FRONTMATTER; do
+    grep -qF "$verdict" "$NQC" || missing="${missing} ${verdict}"
+  done
+  if [ -n "$missing" ]; then
+    fail "note-quality-check/SKILL.md omits corruption verdict(s):${missing}"
+  else
+    ok "note-quality-check names all 5 corruption verdicts (grouped form)"
+  fi
+  # The behaviour, not just the names: a corrupted note must be excluded from
+  # scoring rather than scored low, and it must be routed for repair.
+  grep -qE 'exclude the note from scoring' "$NQC" \
+    && ok "note-quality-check excludes corrupted notes from scoring" \
+    || fail "note-quality-check missing the exclude-from-scoring rule for corrupted notes"
+  grep -qE 'route to property-enrich / note-rename' "$NQC" \
+    && ok "note-quality-check routes corrupted notes for repair" \
+    || fail "note-quality-check missing the repair-routing clause"
+else
+  fail "pinned subject missing: $NQC (renamed or deleted?)"
+fi
 
 # ─── Section [6/6] Grep-uniqueness — single-source-of-truth enforcement ─────
 echo "[6/6] Grep-uniqueness"

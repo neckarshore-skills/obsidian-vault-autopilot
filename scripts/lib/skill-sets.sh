@@ -36,22 +36,25 @@ preflight_skills() {
 # unnoticed.
 #
 # Callers pass the derived list on stdin.
+# THE FLOOR IS THE FULL MEMBERSHIP, NOT THE HISTORICAL FOUR. A count check of
+# "at least 4" would have permitted the exact regression this file was written
+# to prevent: rename the heading in note-quality-check and property-classify
+# and the derivation returns the old four, the floor passes, and the two skills
+# brought under the contract on 2026-09-21 fall silently back out. The named
+# list IS the check; there is no separate count.
+#
+# Editing this list is a deliberate act, and that is the point — the contract
+# derives, the floor pins. A skill leaves the pre-flight population only when
+# someone decides it should, never because a heading was reworded.
 assert_preflight_floor() {
   local derived; derived="$(cat)"
-  local count; count=$(printf '%s\n' "$derived" | grep -c . || true)
-
-  if [ "$count" -lt 4 ]; then
-    echo "FAIL: preflight_skills() derived $count skills — the floor is 4." >&2
-    echo "      Either the '## Pre-flight' heading changed shape or skills/ moved." >&2
-    echo "      Derived: ${derived:-<empty>}" >&2
-    return 1
-  fi
 
   local floor_skill
-  for floor_skill in inbox-sort note-rename property-enrich property-describe; do
+  for floor_skill in inbox-sort note-quality-check note-rename \
+                     property-classify property-describe property-enrich; do
     if ! printf '%s\n' "$derived" | grep -qx "skills/${floor_skill}/SKILL.md"; then
-      echo "FAIL: launch-scope skill '${floor_skill}' dropped out of the derived" >&2
-      echo "      pre-flight set. It has carried this contract since v0.1.5." >&2
+      echo "FAIL: '${floor_skill}' dropped out of the derived pre-flight set." >&2
+      echo "      It is a contract member; a reworded heading must not remove it." >&2
       echo "      Derived: $derived" >&2
       return 1
     fi
