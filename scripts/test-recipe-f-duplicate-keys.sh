@@ -143,12 +143,42 @@ echo "[3/6] yaml-edits.md content claims"
 
 EDITS="${REPO_ROOT}/references/yaml-edits.md"
 
+# Fail-closed guard for the PINNED subject below. One assertion in this file is
+# NEGATIVE (`grep && fail || ok`, the last one in this block): over a missing or
+# empty file, grep exits non-zero and it reports PASS — green by absence, which is
+# the exact failure mode a pin owes a guard against. Until now that line was
+# protected only by ORDERING: the positive assertions above it happen to prove the
+# file exists. Reorder or delete them and the negative one silently goes green.
+# Measured 2026-09-22: this is the only negative assertion in scripts/.
+if [ ! -r "$EDITS" ] || [ ! -s "$EDITS" ]; then
+  fail "recipe (f) pin: references/yaml-edits.md is missing, empty or unreadable — the pin has lost its subject"
+else
+  ok "recipe (f) pin: yaml-edits.md present and non-empty"
+fi
+
 grep -q "ABORT recipe (f) for this file" "$EDITS" && ok "step 3 sub-case (d) ABORT language present" || fail "step 3 sub-case (d) ABORT language missing"
 grep -q "duplicate-key-removed-identical" "$EDITS" && ok "Class-D identical-collision finding category present" || fail "Class-D identical-collision finding category missing"
 grep -q "duplicate-key-divergent-values" "$EDITS" && ok "Class-A divergent finding category present" || fail "Class-A divergent finding category missing"
 grep -q "Worked example A — recipe (f) identical-value collision" "$EDITS" && ok "worked example A heading present" || fail "worked example A heading missing"
 grep -q "Worked example B — recipe (f) divergent-value collision" "$EDITS" && ok "worked example B heading present" || fail "worked example B heading missing"
-grep -qF "duplicate-key removed: created (kept original quoted-form value 2024-03-14, removed plain-form value 2025-01-01)" "$EDITS" && fail "old contradicting worked-example finding-text still present" || ok "old contradicting worked-example finding-text removed"
+# The only NEGATIVE assertion in scripts/ — written long-hand on purpose. The one-line
+# form `grep -qF ... && fail || ok` reports PASS when the file is absent or empty,
+# because grep exits non-zero for "no match" and for "no file" alike. The guard above
+# turns the SUITE red in that case, but this line would still print PASS, and a reader
+# scanning output is exactly who a regression pin is written for.
+#
+# The predicate MUST be the same one the guard uses. An earlier version of this fix
+# tested only `-s`, and a non-empty UNREADABLE file passed it: grep then failed to read
+# the file, exited non-zero, and the else-branch reported the old text as removed — the
+# very green-by-absence this block exists to kill, one branch further down. Found by
+# CodeRabbit on PR #104, reproduced with `chmod 000` before it was believed.
+if [ ! -r "$EDITS" ] || [ ! -s "$EDITS" ]; then
+  fail "old contradicting worked-example finding-text: cannot tell — \$EDITS is missing, empty or unreadable"
+elif grep -qF "duplicate-key removed: created (kept original quoted-form value 2024-03-14, removed plain-form value 2025-01-01)" "$EDITS"; then
+  fail "old contradicting worked-example finding-text still present"
+else
+  ok "old contradicting worked-example finding-text removed"
+fi
 
 # ─── Section [4/6] Sanity-doc content claims (yaml-sanity.md) ───────────────
 echo "[4/6] yaml-sanity.md content claims"
