@@ -221,9 +221,18 @@ assert_grep "1 hour" "$RECIPE_DOC"
 # ---------------------------------------------------------------------------
 # 5. All 4 SKILL.md files reference the recipe doc + SKIP behavior
 # ---------------------------------------------------------------------------
-echo "[5/5] SKILL.md cross-refs..."
-for skill in property-enrich note-rename inbox-sort property-describe; do
-  SKILL_MD="skills/$skill/SKILL.md"
+# CONTRACT: every skill declaring a "## Pre-flight" section must cross-ref the
+# recipe doc. Derived, not enumerated — see scripts/lib/skill-sets.sh.
+# shellcheck source=lib/skill-sets.sh
+. "$(cd "$(dirname "$0")/.." && pwd)/scripts/lib/skill-sets.sh"
+PREFLIGHT_SKILLS=()
+while IFS= read -r line; do
+  [ -n "$line" ] && PREFLIGHT_SKILLS+=("$line")
+done < <(preflight_skills)
+printf '%s\n' "${PREFLIGHT_SKILLS[@]}" | assert_preflight_floor || exit 1
+
+echo "[5/5] SKILL.md cross-refs (${#PREFLIGHT_SKILLS[@]} pre-flight skills)..."
+for SKILL_MD in "${PREFLIGHT_SKILLS[@]}"; do
   assert_path "$SKILL_MD" file
   assert_grep "clone-cluster-detection.md" "$SKILL_MD"
   # Must mention skip on cluster-with-no-alt-source explicitly
@@ -261,4 +270,4 @@ if [ -n "$SKILL_REIMPL" ]; then
   exit 1
 fi
 
-echo "PASS: clone-cluster fixture + decision matrix + recipe doc + 4 SKILL.md cross-refs + grep-uniqueness"
+echo "PASS: clone-cluster fixture + decision matrix + recipe doc + ${#PREFLIGHT_SKILLS[@]} SKILL.md cross-refs + grep-uniqueness"

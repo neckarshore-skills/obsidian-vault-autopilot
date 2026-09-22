@@ -110,14 +110,22 @@ if ! grep -qF '\\?\' "$PREFLIGHT"; then
 fi
 
 # ---------------------------------------------------------------------------
-# 4. All four launch-scope SKILL.md files point at the preflight + enumeration
+# 4. EVERY pre-flight SKILL.md points at the preflight + enumeration (derived)
 # ---------------------------------------------------------------------------
 
-for skill in inbox-sort note-rename property-enrich property-describe; do
-  skill_md="skills/$skill/SKILL.md"
+# CONTRACT: derived from the "## Pre-flight" predicate, not enumerated.
+# shellcheck source=lib/skill-sets.sh
+. "$(cd "$(dirname "$0")/.." && pwd)/scripts/lib/skill-sets.sh"
+PREFLIGHT_SKILLS=()
+while IFS= read -r line; do
+  [ -n "$line" ] && PREFLIGHT_SKILLS+=("$line")
+done < <(preflight_skills)
+printf '%s\n' "${PREFLIGHT_SKILLS[@]}" | assert_preflight_floor || exit 1
+
+for skill_md in "${PREFLIGHT_SKILLS[@]}"; do
   assert_path "$skill_md" file
   assert_grep "windows-preflight.md" "$skill_md"
   assert_grep "enumerat" "$skill_md"  # case-insensitive root: "enumerate"/"enumeration"
 done
 
-echo "PASS: tests/fixtures/windows-trailing-dot/ + windows-preflight enumeration guidance + 4 SKILL.md cross-refs"
+echo "PASS: tests/fixtures/windows-trailing-dot/ + windows-preflight enumeration guidance + ${#PREFLIGHT_SKILLS[@]} SKILL.md cross-refs"
