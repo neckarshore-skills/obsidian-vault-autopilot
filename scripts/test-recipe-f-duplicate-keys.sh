@@ -166,8 +166,14 @@ grep -q "Worked example B — recipe (f) divergent-value collision" "$EDITS" && 
 # because grep exits non-zero for "no match" and for "no file" alike. The guard above
 # turns the SUITE red in that case, but this line would still print PASS, and a reader
 # scanning output is exactly who a regression pin is written for.
-if [ ! -s "$EDITS" ]; then
-  fail "old contradicting worked-example finding-text: cannot tell — \$EDITS is missing or empty"
+#
+# The predicate MUST be the same one the guard uses. An earlier version of this fix
+# tested only `-s`, and a non-empty UNREADABLE file passed it: grep then failed to read
+# the file, exited non-zero, and the else-branch reported the old text as removed — the
+# very green-by-absence this block exists to kill, one branch further down. Found by
+# CodeRabbit on PR #104, reproduced with `chmod 000` before it was believed.
+if [ ! -r "$EDITS" ] || [ ! -s "$EDITS" ]; then
+  fail "old contradicting worked-example finding-text: cannot tell — \$EDITS is missing, empty or unreadable"
 elif grep -qF "duplicate-key removed: created (kept original quoted-form value 2024-03-14, removed plain-form value 2025-01-01)" "$EDITS"; then
   fail "old contradicting worked-example finding-text still present"
 else
