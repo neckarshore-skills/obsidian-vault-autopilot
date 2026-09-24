@@ -208,3 +208,78 @@ test('buildRemovalRecommendations: no numeric artifacts -> empty list', () => {
   const notes = [{ path: 'a.md', text: '---\ntags:\n  - research\n---\nx\n' }];
   assert.deepEqual(numerics(notes), []);
 });
+
+// ---- #106: real-vault run 2026-09-24 — an existing compliant spelling beats the heuristic ----
+// The June acronym preference, generalised: when the resolver falls back to the heuristic,
+// a variant the vault already uses that trips NO convention violation is the canonical.
+// Exactly one such variant -> it wins. Several that disagree -> NO rec (needs a dictionary
+// entry, a human call); the engine must not pick a winner by capitalisation.
+
+test('#106: an existing compliant internal-capital spelling wins (vibecoding+VibeCoding -> VibeCoding)', () => {
+  const notes = [
+    { path: 'a.md', text: '---\ntags:\n  - vibecoding\n---\n' },
+    { path: 'b.md', text: '---\ntags:\n  - VibeCoding\n---\n' },
+  ];
+  const recs = buildRecommendations(buildInventory(notes), dict);
+  assert.equal(recs.find((x) => x.to === 'Vibecoding'), undefined, 'must not flatten VibeCoding to Vibecoding');
+  const r = recs.find((x) => x.to === 'VibeCoding');
+  assert.ok(r, 'must fold the lowercase variant into the existing VibeCoding');
+  assert.equal(r.from, 'vibecoding');
+  assert.equal(r.source, 'existing');
+});
+
+test('#106: two compliant spellings that disagree produce NO rec (Omnopsis+OMNOPSIS)', () => {
+  const notes = [
+    { path: 'a.md', text: '---\ntags:\n  - Omnopsis\n---\n' },
+    { path: 'b.md', text: '---\ntags:\n  - OMNOPSIS\n---\n' },
+  ];
+  const recs = buildRecommendations(buildInventory(notes), dict);
+  assert.equal(recs.filter((x) => /omnopsis/i.test(x.from) || /omnopsis/i.test(x.to)).length, 0,
+    'the engine cannot know which spelling is the name; no rec, leave it to a dictionary entry');
+});
+
+test('#106: a dictionary entry settles a disagreement the heuristic must not (Omnopsis+OMNOPSIS + brand)', () => {
+  const d = mergeOverrides({}, { brands: { omnopsis: 'Omnopsis' } });
+  const notes = [
+    { path: 'a.md', text: '---\ntags:\n  - Omnopsis\n---\n' },
+    { path: 'b.md', text: '---\ntags:\n  - OMNOPSIS\n---\n' },
+  ];
+  const r = buildRecommendations(buildInventory(notes), d).find((x) => x.to === 'Omnopsis');
+  assert.ok(r);
+  assert.equal(r.source, 'brand');
+});
+
+test('#106: shipped defaults keep Apple-style brands whole (iOS stays iOS, macos -> macOS)', () => {
+  const dictReal = mergeOverrides(defaults, {});
+  const notes = [
+    { path: 'a.md', text: '---\ntags:\n  - iOS\n---\n' },
+    { path: 'b.md', text: '---\ntags:\n  - macos\n  - MacOS\n---\n' },
+  ];
+  const recs = buildRecommendations(buildInventory(notes), dictReal);
+  assert.equal(recs.find((x) => x.to === 'IOS'), undefined, 'iOS must never become IOS');
+  assert.equal(recs.find((x) => x.from === 'iOS'), undefined, 'a correct iOS needs no rec at all');
+  const mac = recs.find((x) => x.to === 'macOS');
+  assert.ok(mac, 'macos/MacOS fold into the brand spelling macOS');
+  assert.equal(mac.source, 'brand');
+});
+
+test('#106 PIN: the June acronym case still resolves (geo+GEO -> GEO, source acronym)', () => {
+  const notes = [
+    { path: 'a.md', text: '---\ntags:\n  - geo\n---\n' },
+    { path: 'b.md', text: '---\ntags:\n  - GEO\n---\n' },
+  ];
+  const r = buildRecommendations(buildInventory(notes), dict).find((x) => x.to === 'GEO');
+  assert.ok(r);
+  assert.equal(r.source, 'acronym');
+});
+
+test('#106: a skipped naming conflict is reported, not silent', () => {
+  const notes = [
+    { path: 'a.md', text: '---\ntags:\n  - Omnopsis\n---\n' },
+    { path: 'b.md', text: '---\ntags:\n  - OMNOPSIS\n---\n' },
+  ];
+  const recs = buildRecommendations(buildInventory(notes), dict);
+  assert.deepEqual(recs.namingConflicts.map((c) => c.key), ['omnopsis']);
+  assert.deepEqual([...recs.namingConflicts[0].variants].sort(), ['OMNOPSIS', 'Omnopsis']);
+  assert.equal(JSON.stringify(recs), '[]', 'the recs JSON shape is unchanged');
+});

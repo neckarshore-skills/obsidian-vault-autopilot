@@ -222,9 +222,11 @@ function frontmatterTags(noteText) {
   return frontmatterTagsFromLines(fm.frontmatter);
 }
 
-function noteTags(noteText) {
+// opts.body === false (bodyTags: "report"): the body is not a tag surface — frontmatter only.
+function noteTags(noteText, opts = {}) {
   const out = [];
   for (const f of frontmatterTags(noteText)) out.push({ tag: f.tag, source: 'frontmatter' });
+  if (opts.body === false) return out;
   const fm = splitFrontmatter(noteText);
   for (const b of bodyTags(fm.body.join(fm.ending))) out.push({ tag: b.tag, source: 'body' });
   return out;
@@ -386,7 +388,9 @@ function assertSurvival(before, after) {
 // Apply ops to a single note. Runs the body survival guard before returning.
 // Frontmatter correctness is covered by the representation-matrix tests, not the
 // body tokenizer, so the guard runs over the body only.
-function applyOps(noteText, ops) {
+// opts.body === false (bodyTags: "report"): the body is returned byte-identical — no
+// rewrite, no residual scan. Frontmatter is still rewritten.
+function applyOps(noteText, ops, opts = {}) {
   const map = compileOps(ops);
   const fm = splitFrontmatter(noteText);
 
@@ -399,13 +403,13 @@ function applyOps(noteText, ops) {
   }
 
   const bodyStr = fm.body.join(fm.ending);
-  const bres = rewriteBodyTags(bodyStr, map);
+  const bres = opts.body === false ? { text: bodyStr, changed: false } : rewriteBodyTags(bodyStr, map);
   if (bres.changed) changed = true;
   assertSurvival(bodyStr, bres.text);
 
   // body residual: a remove-op tag that still lives inline (reported, never stripped)
   const bodyResidual = [];
-  for (const t of scanBody(bres.text)) {
+  for (const t of (opts.body === false ? [] : scanBody(bres.text))) {
     const k = logicalKey(t.tag);
     if (map.has(k) && map.get(k) === null) bodyResidual.push(t.tag);
   }
@@ -458,11 +462,11 @@ function separatorVariantGroups(tags) {
 
 // Logical-tag inventory across a set of notes. noteCount counts NOTES (not raw
 // occurrences) so single-note tags surface as orphans. display = first-seen casing.
-function buildInventory(notes) {
+function buildInventory(notes, opts = {}) {
   const byKey = new Map();
   for (const { path, text } of notes) {
     const seenInNote = new Set();
-    for (const t of noteTags(text)) {
+    for (const t of noteTags(text, opts)) {
       const k = logicalKey(t.tag);
       if (!byKey.has(k)) byKey.set(k, { key: k, display: t.tag, variants: new Set(), files: [], noteCount: 0 });
       const rec = byKey.get(k);
@@ -475,8 +479,8 @@ function buildInventory(notes) {
     .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
 }
 
-function auditFindings(notes) {
-  const inventory = buildInventory(notes);
+function auditFindings(notes, opts = {}) {
+  const inventory = buildInventory(notes, opts);
   const spellings = [...new Set(inventory.flatMap((r) => r.variants))];
   const caseGroups = caseVariantGroups(filterReserved(spellings));
   const separatorGroups = separatorVariantGroups(filterReserved(spellings));
@@ -486,11 +490,17 @@ function auditFindings(notes) {
   const invalid = spellings.filter((s) => !isValidTag(s));
   const numericArtifacts = invalid.filter((s) => /^[\p{N}/_-]+$/u.test(s));
   const otherInvalidTags = invalid.filter((s) => !/^[\p{N}/_-]+$/u.test(s));
-  const untagged = notes.filter((n) => noteTags(n.text).length === 0).map((n) => n.path);
+  const untagged = notes.filter((n) => noteTags(n.text, opts).length === 0).map((n) => n.path);
+  // bodyTags: "report" — inline body #tags are not tags in this vault; list them as a finding
+  // (report-only: stripping a # from prose changes the sentence, so it is never automatic).
+  const bodyTagNotes = opts.body === false
+    ? notes.map((n) => { const fm = splitFrontmatter(n.text); return { path: n.path, tags: bodyTags(fm.body.join(fm.ending)).map((b) => b.tag) }; })
+        .filter((x) => x.tags.length > 0)
+    : [];
   return {
     totalNotes: notes.length,
     totalTags: inventory.length,
-    inventory, caseGroups, separatorGroups, orphans, numericArtifacts, otherInvalidTags, untagged,
+    inventory, caseGroups, separatorGroups, orphans, numericArtifacts, otherInvalidTags, untagged, bodyTagNotes,
   };
 }
 

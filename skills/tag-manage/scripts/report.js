@@ -65,6 +65,19 @@ function renderFindings(f, a) {
     }
   }
 
+  // --- Inline body tags (bodyTags: "report" only) ---
+  // In a frontmatter-only vault a body #tag is not a tag. It is listed, never stripped:
+  // removing a # from prose changes the sentence (do-no-harm), so that is a human edit.
+  if (f.bodyTagNotes && f.bodyTagNotes.length > 0) {
+    const total = f.bodyTagNotes.reduce((s, x) => s + x.tags.length, 0);
+    parts.push('');
+    parts.push('### Inline body tags (not tags in this vault - review)');
+    parts.push(`${f.bodyTagNotes.length} note(s) carry ${total} inline \`#tag\`(s) in their text. They are not counted and not rewritten.`);
+    const shown = f.bodyTagNotes.slice(0, 50);
+    for (const x of shown) parts.push(`- \`${x.path}\`: ${x.tags.map((t) => `\`${t}\``).join(', ')}`);
+    if (f.bodyTagNotes.length > shown.length) parts.push(`- … and ${f.bodyTagNotes.length - shown.length} more`);
+  }
+
   // --- Unused & low-usage ---
   parts.push('');
   parts.push('### Unused & low-usage');
@@ -139,8 +152,16 @@ function renderReport({ scope, date, analysis: a, findings: f, recommendations: 
   lines.push(`## Top 20 Tags\n\n` + table(['#', 'Tag', 'Count', '% tagged'], a.topN.map((t, i) => [i + 1, `\`${t.display}\``, fmt(t.noteCount), `${t.pct}%`])) + '\n');
   lines.push(`## Findings\n\n` + renderFindings(f, a) + '\n');
   lines.push(`## Recommendations\n\n` + (recs.length ? table(['#', 'Action', 'From', 'To', 'Notes', 'Note'], recs.map((r) => [
-    r.id, `${r.kind} (${r.severity})`, `\`${r.from}\``, `\`${r.to}\``, r.notesAffected, r.source === 'heuristic' ? 'verify casing (not in dictionary)' : r.source,
+    r.id, `${r.kind} (${r.severity})`, `\`${r.from}\``, `\`${r.to}\``, r.notesAffected, r.source === 'heuristic' ? 'verify casing (not in dictionary)' : r.source === 'existing' ? 'existing vault spelling' : r.source,
   ])) : '_No recommendations._') + '\n');
+  // Naming conflicts (#106): spellings the engine will not choose between. Reported, never
+  // silently skipped — the fix is one `brands` entry in Tag Manage Config.md.
+  const conflicts = recs.namingConflicts || [];
+  if (conflicts.length) {
+    lines.push(`## Naming conflicts (no recommendation)\n\n`
+      + 'These tags are spelled two correct-looking ways. Which one is the name is your call: add the one you want to `brands` in `Tag Manage Config.md` and the next audit folds the others into it.\n\n'
+      + table(['Logical key', 'Spellings', 'Notes'], conflicts.map((c) => [`\`${c.key}\``, c.variants.map((v) => `\`${v}\``).join(', '), c.noteCount])) + '\n');
+  }
   // Tag Hierarchy (nest) — declared-hierarchy promotions. Rendered only when present, in
   // its OWN section so it is visible in the browsable report (the skill's contract: the
   // report is how the user knows what is possible) while staying out of the cleanup
