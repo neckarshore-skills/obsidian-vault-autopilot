@@ -272,3 +272,14 @@ test('#106 PIN: the June acronym case still resolves (geo+GEO -> GEO, source acr
   assert.ok(r);
   assert.equal(r.source, 'acronym');
 });
+
+test('#106: a skipped naming conflict is reported, not silent', () => {
+  const notes = [
+    { path: 'a.md', text: '---\ntags:\n  - Omnopsis\n---\n' },
+    { path: 'b.md', text: '---\ntags:\n  - OMNOPSIS\n---\n' },
+  ];
+  const recs = buildRecommendations(buildInventory(notes), dict);
+  assert.deepEqual(recs.namingConflicts.map((c) => c.key), ['omnopsis']);
+  assert.deepEqual([...recs.namingConflicts[0].variants].sort(), ['OMNOPSIS', 'Omnopsis']);
+  assert.equal(JSON.stringify(recs), '[]', 'the recs JSON shape is unchanged');
+});

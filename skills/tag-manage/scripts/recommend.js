@@ -28,6 +28,7 @@ function buildRecommendations(inventory, dict, notes) {
   // Only constructed when notes are provided; otherwise we fall back to noteCount.
   const byPath = notes ? new Map(notes.map((n) => [n.path, n.text])) : null;
   const recs = [];
+  const conflicts = [];
   let id = 0;
   for (const r of inventory) {
     if (isReserved(r.key)) continue;
@@ -51,7 +52,11 @@ function buildRecommendations(inventory, dict, notes) {
         // Any other difference (Omnopsis / OMNOPSIS, Clearpath / ClearPath) is a naming
         // question the engine cannot answer -> no rec.
         const forms = new Set(compliant.map(segmentCapitalised));
-        if (forms.size > 1) continue;
+        if (forms.size > 1) {
+          // Reported, never silently skipped: the report lists it with the fix (a brands entry).
+          conflicts.push({ key: r.key, variants: compliant, noteCount: r.noteCount });
+          continue;
+        }
         canonical = [...forms][0]; source = 'heuristic';
       } else if (compliant.length === 1) {
         canonical = compliant[0]; source = isAcronym(canonical) ? 'acronym' : 'existing';
@@ -91,6 +96,9 @@ function buildRecommendations(inventory, dict, notes) {
   }
   recs.sort((a, b) => b.notesAffected - a.notesAffected || a.from.localeCompare(b.from));
   recs.forEach((rr, i) => { rr.id = i + 1; });
+  // Naming conflicts ride along as a non-enumerable property so the recs array (and the
+  // .tag-manage-recommendations.json written from it) keeps its exact shape.
+  Object.defineProperty(recs, 'namingConflicts', { value: conflicts, enumerable: false });
   return recs;
 }
 

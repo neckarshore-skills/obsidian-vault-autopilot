@@ -748,3 +748,25 @@ test('runInduce: scores clusters; declared-parent + frequency reach implement; J
   const written = JSON.parse(fs.readFileSync(path.join(reportDirAbs, '.tag-organize-clusters.json'), 'utf8'));
   assert.ok(written[0].category && typeof written[0].score === 'number', 'JSON carries score + category');
 });
+
+// ---- #106: the apply-boundary validator runs in the vault's tag mode ----
+// In a frontmatter-only vault (bodyTags: "report") a tag that exists only as an inline body
+// #tag is NOT a tag, so it must not satisfy the both-exist guard for a model-authored merge.
+test('#106: report mode — a body-only merge target fails the both-exist guard; rewrite mode accepts it', () => {
+  const cliPath = path.join(__dirname, '..', 'scripts', 'cli.js');
+  const run = (mode) => {
+    const dir = tmpVault({
+      'Tag Manage Config.md': '# Config\n\n```json\n{"bodyTags": "' + mode + '"}\n```\n',
+      'a.md': '---\ntags:\n  - versicherung\n---\ntext\n',
+      'b.md': '---\ntags:\n  - Other\n---\nsee #Insurance here\n',
+    });
+    const recs = path.join(dir, '.merges.json');
+    fs.writeFileSync(recs, JSON.stringify([{ id: 1, kind: 'merge', source: 'cross-language', ops: [{ type: 'rename', from: 'versicherung', to: 'Insurance' }] }]));
+    return spawnSync('node', [cliPath, 'plan', dir, '--from-recs', recs], { encoding: 'utf8' });
+  };
+  const report = run('report');
+  assert.equal(report.status, 2, 'report mode must ABORT');
+  assert.match(report.stderr, /ABORTED.*Insurance/);
+  const rewrite = run('rewrite');
+  assert.equal(rewrite.status, 0, 'rewrite mode counts the body tag, so the target exists');
+});
