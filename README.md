@@ -21,7 +21,7 @@ in full before processing sensitive content.
 
 **Eleven skills** manage your vault automatically — four launch-scope skills validated to Gold-Run coverage, plus seven more shipped in beta and usable today.
 
-> **New in v0.4.0:** `skill-library-sync` reconciles a vault's Skill Library against the skills that actually exist — created, relocated, retired, and renamed notes, previewed before any write.
+> **New in v0.5.0:** `tag-manage` keeps the brand spellings your vault already uses (`iOS`, `VibeCoding`) and asks instead of guessing when two spellings disagree, and a frontmatter-only mode (`"bodyTags": "report"`) leaves `#tags` in note text untouched. `skill-library-sync` no longer retires skills it never looked for, sees symlinked skills, and keeps your own frontmatter.
 
 ### Launch-scope skills (Gold-Run validated)
 
