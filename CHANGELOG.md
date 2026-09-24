@@ -10,6 +10,8 @@ For implementation detail and internal release notes, see [`logs/changelog.md`](
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-09-24
+
 ### Added
 
 - **`tag-manage`: frontmatter-only mode** (#106). Set `"bodyTags": "report"` in `Tag Manage Config.md` and inline `#tags` in note text are no longer treated as tags: not counted, never rewritten, listed in the audit for you to review. Default behaviour is unchanged.
