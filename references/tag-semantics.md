@@ -78,6 +78,8 @@ A logical operation (rename `ai → ml`) must hit every on-disk representation c
    a hardcoded lowercase. Brand/abbreviation exceptions in that file still win.
 3. **Removal is frontmatter-only.** Removing an inline body `#tag` from prose mutates the sentence
    (content change, against do-no-harm) — the audit *reports* inline orphans, never auto-strips them.
+   **Frontmatter-only vaults (#106, 2026-09-24):** with `bodyTags: "report"` in `Tag Manage Config.md`,
+   representations 5 and 6 below are not tags at all — not counted, not renamed, only listed.
 4. **Deterministic near-duplicate detection = case + separator only.** Separator grouping is
    `-` ↔ `_` ONLY; `/` is **excluded** (a nested tag `ai/ml` is semantically distinct from `ai-ml`).
    Plural/singular, abbreviation, and synonym consolidation are **AI-proposed** in the preview, never

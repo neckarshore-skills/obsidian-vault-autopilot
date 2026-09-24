@@ -100,6 +100,8 @@ When the engine proposes a rename or merge, it resolves the target spelling in t
 
 1. **Brand dictionary** — exact canonical spelling (e.g., `github` → `GitHub`). Source label: `brand`. Enforcement is unconditional: even a uniformly-lowercase brand with no mixed variant gets a rename recommendation (`github` → `GitHub`).
 2. **Compounds dictionary** — known multi-word or hyphenated compounds (e.g., `ai-ml` → `AI-ML`, `opensource` → `OpenSource`). Source label: `compound`.
+
+   **Existing spelling before heuristic (#106).** When neither dictionary matches, a spelling the vault already uses that trips no convention violation wins over the heuristic guess: `vibecoding` + `VibeCoding` → `VibeCoding` (source `existing`), `geo` + `GEO` → `GEO` (source `acronym`). Two compliant spellings that differ beyond the first letter of a segment (`Omnopsis` / `OMNOPSIS`, `Clearpath` / `ClearPath`) produce **no recommendation** — which one is the name is your call; add a `brands` entry to settle it. Brands with a lowercase first letter (`iOS`, `macOS`, `iPhone`) cannot be told apart from camelCase by rule; they ship in the default `brands` dictionary.
 3. **PascalCase heuristic** — segments split on `-` or `_`, each capitalized (e.g., `ai-foo` → `AI-Foo`, `day-trading` → `DayTrading`). Source label: `heuristic` — flagged in the report as "verify casing (not in dictionary)".
 
 Heuristic recommendations are proposals, not enforcements. The report flags them explicitly because the heuristic cannot know all compound terms or brand names. A heuristic recommendation is generated only when a real convention violation exists — a compliant tag is never renamed to a heuristic guess.
@@ -140,6 +142,7 @@ Fields:
 
 - `brands` — vault-specific brand names and abbreviations. Keys are case-insensitive (matched via logical key). Values are the canonical spellings to enforce.
 - `compounds` — vault-specific multi-word or hyphenated terms. Keys are the "stripped" or common variants; values are the canonical spellings.
+- `bodyTags` — `"rewrite"` (default) or `"report"`. With `"report"` the vault is **frontmatter-only**: inline body `#tags` are not counted as tags, are never rewritten (the body stays byte-identical on every apply), and the audit lists them under *Inline body tags* for a human to review. Use it when your rule is "text contains no `#`". Any other value aborts the run.
 - `reportDir` — path relative to the vault root where audit reports and the recommendations JSON are written. Without this field (or `--report-dir`), the audit writes no file and prints to stdout only.
 - `hierarchy` — declared parent → children clusters (see Tag hierarchy below). A flat tag matching a declared child is offered a `nest` recommendation promoting it to `Parent/Child`. Authored most easily via the `set-hierarchy` command; vault-local only (no shipped defaults).
 

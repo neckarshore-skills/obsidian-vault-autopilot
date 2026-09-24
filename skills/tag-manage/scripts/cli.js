@@ -115,7 +115,8 @@ function auditVault(dir) {
 function applyToVault(dir, ops, opts = {}) {
   const write = !!opts.write;
   const threshold = opts.massChangeThreshold ?? DEFAULT_MASS_CHANGE_THRESHOLD;
-  const transform = opts.transform || ((text) => applyOps(text, ops));
+  const tagOpts = opts.tagOpts || {};
+  const transform = opts.transform || ((text) => applyOps(text, ops, tagOpts));
 
   const notes = excludeReportArtifacts(readNotes(dir), dir, opts.reportDirAbs);
 
@@ -126,7 +127,7 @@ function applyToVault(dir, ops, opts = {}) {
   // real engine, not the injected transform.
   if (!opts.transform) {
     for (const op of ops) {
-      const opCount = notes.filter((n) => applyOps(n.text, [op]).changed).length;
+      const opCount = notes.filter((n) => applyOps(n.text, [op], tagOpts).changed).length;
       if (opCount > threshold) throw new MassChangeError(opCount, threshold, op);
     }
   }
@@ -185,6 +186,7 @@ function excludeReportArtifacts(notes, dir, reportDirAbs) {
 
 function runAudit(dir, { date, fileStamp = '', defaultsPath, configText, reportDirAbs, nameSuffix = '' }) {
   const dict = loadConfig({ defaultsPath, configText });
+  const tagOpts = { body: dict.bodyTags !== 'report' };
   // Walk once: scanned files + the _-folders the scan skips (#236 blindspot).
   // excluded feeds the report's Scan Coverage section so a finding of `0` is never
   // read as "whole vault clean" when real content sits in _Work/_Personal/etc.
@@ -193,18 +195,18 @@ function runAudit(dir, { date, fileStamp = '', defaultsPath, configText, reportD
   // This prevents a written report note from poisoning the next audit scan,
   // while keeping every real note in scope even when reportDirAbs == the vault root.
   const notes = excludeReportArtifacts(files.map((p) => ({ path: p, text: fs.readFileSync(p, 'utf8') })), dir, reportDirAbs);
-  const inventory = buildInventory(notes);
-  const findings = auditFindings(notes);
-  const analysis = analyze(notes, inventory);
+  const inventory = buildInventory(notes, tagOpts);
+  const findings = auditFindings(notes, tagOpts);
+  const analysis = analyze(notes, inventory, tagOpts);
   const recommendations = buildRecommendations(inventory, dict, notes);
   // NEST (Phase 1): declared-hierarchy promotions, computed from the parsed config.
   // Kept in a SEPARATE list + file so the default cleanup ("apply all" of the recs
   // file) never silently re-homes tags; nest is opt-in via --from-recs the nest file.
   const { map: hierMap, errors: hierarchyErrors } = parseHierarchy(dict.hierarchy);
-  const nestRecommendations = buildNestRecommendations(inventory, hierMap, notes);
+  const nestRecommendations = buildNestRecommendations(inventory, hierMap, notes, tagOpts);
   // Slice 1a: numeric-artifact removal candidates. Destructive + opt-in, so kept in
   // a SEPARATE list + file (mirrors nest) — never bundled into the default "apply all".
-  const removalRecommendations = buildRemovalRecommendations(inventory, findings.numericArtifacts, notes);
+  const removalRecommendations = buildRemovalRecommendations(inventory, findings.numericArtifacts, notes, tagOpts);
   const ctx = buildContext(inventory, dict);
   const violators = inventory.filter((r) => classifyTag(r.display, ctx).violation).length;
   const conformityPct = inventory.length ? Math.round(((inventory.length - violators) / inventory.length) * 100) : 100;
@@ -277,7 +279,7 @@ function printAudit(f) {
 }
 
 function printPlan(res, header) {
-  console.log(`tag-manage ${header} — ${res.changedCount} of ${res.fileCount} notes would change`);
+  console.log(`tag-manage ${header} — ${res.changedCount} of ${res.fileCount} notes ${header.includes('WROTE') ? 'changed' : 'would change'}`);
   for (const p of res.planned.filter((x) => x.changed)) {
     console.log(`\n--- ${p.path}`);
     if (p.bodyResidual.length) console.log(`  WARN: inline body still contains removed tag(s): ${p.bodyResidual.join(', ')} (frontmatter-only removal)`);
@@ -321,13 +323,13 @@ function resolveReportContext(target, rest) {
 // by walkMarkdown -> no self-poisoning). The agent reviews the proposal, reads content
 // only for uncertain families, then persists approved clusters via set-hierarchy; the
 // nest itself rides the existing applyOps path (no new write code in Slice 1).
-function runInduce(dir, { reportDirAbs, date, fileStamp = '', scope = 'Vault-wide', declaredParents = [], brands } = {}) {
+function runInduce(dir, { reportDirAbs, date, fileStamp = '', scope = 'Vault-wide', declaredParents = [], brands, tagOpts = {} } = {}) {
   // Walk once: scanned files + the _-folders the scan skips (#236 blindspot) — the induce
   // proposal must disclose them too, not just the audit report.
   const { files, excluded } = walkWithExclusions(dir);
   // Exclude report artifacts before scanning — mirrors runAudit (matters when reportDir is
   // a non-underscore dir that walkMarkdown would otherwise scan, incl. a prior proposal note).
-  const inventory = buildInventory(excludeReportArtifacts(files.map((p) => ({ path: p, text: fs.readFileSync(p, 'utf8') })), dir, reportDirAbs));
+  const inventory = buildInventory(excludeReportArtifacts(files.map((p) => ({ path: p, text: fs.readFileSync(p, 'utf8') })), dir, reportDirAbs), tagOpts);
   // brands keeps internal-camelCase brand names whole (LinkedIn, not Linked) for parent naming.
   const clusters = clusterByName(inventory, { brands }).map((c) => ({ ...c, ...scoreCluster(c, { declaredParents }) }));
   const outDir = reportDirAbs || dir;
@@ -380,7 +382,7 @@ if (require.main === module) {
       const { defaultsPath, configText, reportDirAbs, date, fileStamp } = resolveReportContext(target, rest);
       const dict = loadConfig({ defaultsPath, configText });
       const declaredParents = Object.keys(dict.hierarchy || {});
-      const { clusters, outPath, notePath } = runInduce(target, { reportDirAbs, date, fileStamp, declaredParents, brands: dict.brands });
+      const { clusters, outPath, notePath } = runInduce(target, { reportDirAbs, date, fileStamp, declaredParents, brands: dict.brands, tagOpts: { body: dict.bodyTags !== 'report' } });
       const byCat = { implement: 0, decide: 0, ignore: 0 };
       for (const c of clusters) byCat[c.category] = (byCat[c.category] || 0) + 1;
       console.error(`induce: ${clusters.length} candidate ${clusters.length === 1 ? 'family' : 'families'} proposed (implement ${byCat.implement} / decide ${byCat.decide} / ignore ${byCat.ignore}) -> ${outPath}`);
@@ -416,6 +418,10 @@ if (require.main === module) {
       const massChangeThreshold = maxRaw ? parseInt(maxRaw, 10) : undefined;
       const write = cmd === 'apply' && rest.includes('--write');
       const fromRecs = getFlagValue(rest, '--from-recs');
+      const { defaultsPath, configText, reportDirAbs, date, fileStamp } = resolveReportContext(target, rest);
+      // One mode for the whole run: the validator's inventory, the mass-change count and the
+      // transform must agree, or a body-only tag would pass the both-exist guard (#106).
+      const tagOpts = { body: loadConfig({ defaultsPath, configText }).bodyTags !== 'report' };
       let ops;
       if (fromRecs) {
         const recsData = JSON.parse(fs.readFileSync(fromRecs, 'utf8'));
@@ -427,13 +433,12 @@ if (require.main === module) {
         // Validate `picked` (not the whole file) so a partial --ids apply is not aborted by an
         // unselected stale rec. Covers BOTH plan and apply (shared branch). The --ops path stays
         // unvalidated by design (bare ops carry no rec.source — the developer/test escape hatch).
-        validateRecs(picked, buildInventory(readNotes(target)));
+        validateRecs(picked, buildInventory(readNotes(target), tagOpts));
         ops = picked.flatMap((r) => r.ops);
       } else {
         ops = loadOps(rest);
       }
-      const { defaultsPath, configText, reportDirAbs, date, fileStamp } = resolveReportContext(target, rest);
-      const res = applyToVault(target, ops, { write, massChangeThreshold, reportDirAbs });
+      const res = applyToVault(target, ops, { write, massChangeThreshold, reportDirAbs, tagOpts });
       printPlan(res, write ? 'apply (WROTE)' : 'plan (dry-run, nothing written)');
       // After a successful --write apply, emit an after-changes report if --report-dir is set.
       if (write && res.wrote && reportDirAbs) {

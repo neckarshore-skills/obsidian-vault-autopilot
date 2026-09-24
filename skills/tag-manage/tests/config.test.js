@@ -25,3 +25,14 @@ test('mergeOverrides carries the vault-local hierarchy block through (defaults s
 test('mergeOverrides: no hierarchy declared -> empty object (never undefined)', () => {
   assert.deepEqual(mergeOverrides({}, {}).hierarchy, {});
 });
+
+// ---- #106: bodyTags switch (frontmatter-only vaults) ----
+test('#106: bodyTags defaults to "rewrite" (existing behaviour unchanged)', () => {
+  assert.equal(mergeOverrides({}, {}).bodyTags, 'rewrite');
+});
+test('#106: bodyTags "report" is carried through', () => {
+  assert.equal(mergeOverrides({}, { bodyTags: 'report' }).bodyTags, 'report');
+});
+test('#106: an unknown bodyTags value fails closed', () => {
+  assert.throws(() => mergeOverrides({}, { bodyTags: 'ignore' }), /bodyTags/);
+});

@@ -47,7 +47,14 @@ function mergeOverrides(defaults, local) {
   // 'en' (default) merges the German half into the English half; 'de' reverses it. Carried
   // through as a config slot the MODEL consults when authoring the merge sidecar — the engine
   // does NOT enforce it (translation is model judgement; validateRecs only checks both-exist).
-  return { brands, compounds, brandStripped, compoundStripped, brandHyphenSet, folderExclusive: l.folderExclusive || {}, reportDir: l.reportDir || null, hierarchy: l.hierarchy || {}, crossLanguageCanonical: l.crossLanguageCanonical || 'en' };
+  // bodyTags (#106): 'rewrite' (default, historic behaviour) treats inline body #tags as
+  // tags and renames them; 'report' makes the vault frontmatter-only — body #tags are not
+  // counted, never rewritten, and listed as a finding. Unknown values fail closed.
+  const bodyTags = l.bodyTags === undefined ? 'rewrite' : l.bodyTags;
+  if (bodyTags !== 'rewrite' && bodyTags !== 'report') {
+    throw new Error(`Tag Manage Config: bodyTags must be "rewrite" or "report", got ${JSON.stringify(l.bodyTags)}`);
+  }
+  return { bodyTags, brands, compounds, brandStripped, compoundStripped, brandHyphenSet, folderExclusive: l.folderExclusive || {}, reportDir: l.reportDir || null, hierarchy: l.hierarchy || {}, crossLanguageCanonical: l.crossLanguageCanonical || 'en' };
 }
 
 function loadConfig({ defaultsPath, configText }) {

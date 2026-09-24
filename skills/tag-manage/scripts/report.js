@@ -65,6 +65,19 @@ function renderFindings(f, a) {
     }
   }
 
+  // --- Inline body tags (bodyTags: "report" only) ---
+  // In a frontmatter-only vault a body #tag is not a tag. It is listed, never stripped:
+  // removing a # from prose changes the sentence (do-no-harm), so that is a human edit.
+  if (f.bodyTagNotes && f.bodyTagNotes.length > 0) {
+    const total = f.bodyTagNotes.reduce((s, x) => s + x.tags.length, 0);
+    parts.push('');
+    parts.push('### Inline body tags (not tags in this vault - review)');
+    parts.push(`${f.bodyTagNotes.length} note(s) carry ${total} inline \`#tag\`(s) in their text. They are not counted and not rewritten.`);
+    const shown = f.bodyTagNotes.slice(0, 50);
+    for (const x of shown) parts.push(`- \`${x.path.split('/').pop()}\`: ${x.tags.map((t) => `\`${t}\``).join(', ')}`);
+    if (f.bodyTagNotes.length > shown.length) parts.push(`- … and ${f.bodyTagNotes.length - shown.length} more`);
+  }
+
   // --- Unused & low-usage ---
   parts.push('');
   parts.push('### Unused & low-usage');

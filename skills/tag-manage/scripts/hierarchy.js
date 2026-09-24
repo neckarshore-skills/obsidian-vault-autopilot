@@ -69,7 +69,7 @@ function createsCycle(parentOf, childKey, parentKey) {
 // nest is a SEPARATE class from the cleanup recs (design § Engine): it changes tag
 // identity across potentially many notes, so it is opt-in per id — never bundled into
 // the default "apply all" cleanup. notesAffected comes from the real engine, never a claim.
-function buildNestRecommendations(inventory, hierMap, notes) {
+function buildNestRecommendations(inventory, hierMap, notes, tagOpts = {}) {
   if (!hierMap || hierMap.size === 0) return [];
   const byPath = notes ? new Map(notes.map((n) => [n.path, n.text])) : null;
   const recs = [];
@@ -84,7 +84,7 @@ function buildNestRecommendations(inventory, hierMap, notes) {
       notesAffected = r.files
         .map((p) => byPath.get(p))
         .filter((t) => t !== undefined)
-        .filter((t) => applyOps(t, ops).changed)
+        .filter((t) => applyOps(t, ops, tagOpts).changed)
         .length;
     }
     // targetMayBeNew: an ENGINE-authored nest whose `to` is a slash path (Parent/Leaf) whose

@@ -10,6 +10,11 @@ function isAcronym(s) {
   return s.length >= 2 && /^[\p{Lu}\p{N}]+$/u.test(s) && /\p{Lu}/u.test(s);
 }
 
+// Upper-case the first letter of every separator segment, leave the rest untouched.
+function segmentCapitalised(s) {
+  return s.replace(/(^|[-_/])(\p{Ll})/gu, (_, sep, ch) => sep + ch.toUpperCase());
+}
+
 function buildContext(inventory, dict) {
   const leaves = new Set();
   for (const r of inventory) if (r.key.includes('/')) leaves.add(r.key.split('/').pop());
@@ -18,6 +23,7 @@ function buildContext(inventory, dict) {
 
 function buildRecommendations(inventory, dict, notes) {
   const ctx = buildContext(inventory, dict);
+  const tagOpts = { body: dict.bodyTags !== 'report' };
   // Build a path -> text map for efficient per-rec changed-note counting.
   // Only constructed when notes are provided; otherwise we fall back to noteCount.
   const byPath = notes ? new Map(notes.map((n) => [n.path, n.text])) : null;
@@ -31,11 +37,25 @@ function buildRecommendations(inventory, dict, notes) {
     if (!isValidTag(r.display)) continue;
     const variants = r.variants;
     let { canonical, source } = canonicalForm(r.display, dict);
-    // If the resolver fell back to the Title-case heuristic but the vault already uses a real
-    // all-caps spelling (GEO, PRD, B2B), prefer that acronym over the heuristic guess (Geo).
+    // When the resolver falls back to the heuristic, a spelling the vault ALREADY uses that
+    // trips no convention violation beats the guess (#106, generalising the June acronym
+    // preference geo+GEO -> GEO). Exactly one such spelling -> it is the canonical
+    // (vibecoding+VibeCoding -> VibeCoding, not Vibecoding). Several that disagree
+    // (Omnopsis+OMNOPSIS) -> no rec: which spelling is the name is a human call, settled by
+    // a dictionary entry, never by capitalisation.
     if (source === 'heuristic') {
-      const acro = variants.find(isAcronym);
-      if (acro) { canonical = acro; source = 'acronym'; }
+      const compliant = [...new Set(variants.filter((v) => !classifyTag(v, ctx).violation))];
+      if (compliant.length > 1) {
+        // Spellings that differ only in the case of a segment's FIRST letter (AI-Testing /
+        // AI-testing) are one spelling; fold to the segment-capitalised form (June v2(d)).
+        // Any other difference (Omnopsis / OMNOPSIS, Clearpath / ClearPath) is a naming
+        // question the engine cannot answer -> no rec.
+        const forms = new Set(compliant.map(segmentCapitalised));
+        if (forms.size > 1) continue;
+        canonical = [...forms][0]; source = 'heuristic';
+      } else if (compliant.length === 1) {
+        canonical = compliant[0]; source = isAcronym(canonical) ? 'acronym' : 'existing';
+      }
     }
     const nonCanonical = variants.filter((v) => v !== canonical);
     const dictionaryBacked = source === 'brand' || source === 'compound';
@@ -59,7 +79,7 @@ function buildRecommendations(inventory, dict, notes) {
       notesAffected = r.files
         .map((p) => byPath.get(p))
         .filter((t) => t !== undefined)
-        .filter((t) => applyOps(t, ops).changed)
+        .filter((t) => applyOps(t, ops, tagOpts).changed)
         .length;
     }
     // targetMayBeNew: this is an ENGINE-authored rec whose canonical `to` is a deterministically
@@ -81,7 +101,7 @@ function buildRecommendations(inventory, dict, notes) {
 // the report renders from+notes, not a fake rename). Disjoint from buildRecommendations,
 // which skips invalids entirely (line: `if (!isValidTag(...)) continue`). Destructive +
 // opt-in: written to a SEPARATE sidecar, never bundled into the default "apply all".
-function buildRemovalRecommendations(inventory, numericArtifacts, notes) {
+function buildRemovalRecommendations(inventory, numericArtifacts, notes, tagOpts = {}) {
   const byPath = notes ? new Map(notes.map((n) => [n.path, n.text])) : null;
   const rowOf = new Map();
   for (const r of inventory) for (const v of r.variants) rowOf.set(v, r);
@@ -95,7 +115,7 @@ function buildRemovalRecommendations(inventory, numericArtifacts, notes) {
       notesAffected = r.files
         .map((p) => byPath.get(p))
         .filter((t) => t !== undefined)
-        .filter((t) => applyOps(t, ops).changed)
+        .filter((t) => applyOps(t, ops, tagOpts).changed)
         .length;
     }
     recs.push({ kind: 'remove', from: tag, notesAffected, source: 'numeric-artifact', ops });

@@ -2,9 +2,9 @@
 // analysis.js — pure frequency/coverage/depth aggregation over a tag inventory.
 const { noteTags } = require('./tags.js');
 
-function analyze(notes, inventory) {
+function analyze(notes, inventory, opts = {}) {
   const totalNotes = notes.length;
-  const taggedNotes = notes.filter((n) => noteTags(n.text).length > 0).length;
+  const taggedNotes = notes.filter((n) => noteTags(n.text, opts).length > 0).length;
   const totalAssignments = inventory.reduce((s, r) => s + r.noteCount, 0);
   const sorted = [...inventory].sort((a, b) => b.noteCount - a.noteCount || (a.key < b.key ? -1 : 1));
   const topN = sorted.slice(0, 20).map((r) => ({

@@ -9,7 +9,7 @@ const {
   bodyTags, frontmatterTags, noteTags,
   applyOps, assertSurvival, SurvivalError,
   caseVariantGroups, separatorVariantGroups, filterReserved,
-  splitFrontmatter, auditFindings,
+  splitFrontmatter, auditFindings, buildInventory,
 } = require('../scripts/tags.js');
 
 // ---------------------------------------------------------------------------
@@ -326,4 +326,42 @@ test('auditFindings splits invalid spellings into numeric vs other', () => {
   const f = auditFindings(notes);
   assert.deepEqual(f.numericArtifacts, ['2026']);
   assert.deepEqual(f.otherInvalidTags, ['Make.com']);
+});
+
+// ---- #106: frontmatter-only mode ({ body: false }) ----
+// Founder rule 2026-09-24: note text contains no #; tags live in frontmatter only. In this
+// mode the body is not a tag surface: it is neither counted nor rewritten, byte for byte.
+const IG = '---\ntags:\n  - claudecode\n---\n# Post\n\n#webdesign #claudecode #uidesign\n\n![x](https://cdn.example/a.jpg)\n';
+
+test('#106: applyOps { body: false } rewrites frontmatter and leaves the body byte-identical', () => {
+  const r = applyOps(IG, [{ type: 'rename', from: 'claudecode', to: 'ClaudeCode' }], { body: false });
+  assert.equal(r.changed, true);
+  assert.match(r.text, /^---\ntags:\n  - ClaudeCode\n---\n/);
+  const bodyOf = (t) => t.slice(t.indexOf('\n---\n', 4) + 5);
+  assert.equal(bodyOf(r.text), bodyOf(IG), 'body must be byte-identical, not merely survival-equal');
+});
+
+test('#106: applyOps { body: false } on a body-only tag changes nothing', () => {
+  const text = '---\ntags:\n  - Instagram\n---\n#claudecode\n';
+  const r = applyOps(text, [{ type: 'rename', from: 'claudecode', to: 'ClaudeCode' }], { body: false });
+  assert.equal(r.changed, false);
+  assert.equal(r.text, text);
+});
+
+test('#106: default applyOps still rewrites body tags (rewrite mode unchanged)', () => {
+  const r = applyOps(IG, [{ type: 'rename', from: 'claudecode', to: 'ClaudeCode' }]);
+  assert.match(r.text, /#ClaudeCode/);
+});
+
+test('#106: noteTags / buildInventory { body: false } see frontmatter only', () => {
+  assert.deepEqual(noteTags(IG, { body: false }).map((t) => t.tag), ['claudecode']);
+  const inv = buildInventory([{ path: 'a.md', text: IG }], { body: false });
+  assert.deepEqual(inv.map((r) => r.key).sort(), ['claudecode']);
+});
+
+test('#106: auditFindings { body: false } lists inline body tags as a finding, rewrite mode lists none', () => {
+  const notes = [{ path: 'x/a.md', text: IG }, { path: 'x/b.md', text: '---\ntags:\n  - Foo\n---\nplain\n' }];
+  const f = auditFindings(notes, { body: false });
+  assert.deepEqual(f.bodyTagNotes, [{ path: 'x/a.md', tags: ['webdesign', 'claudecode', 'uidesign'] }]);
+  assert.deepEqual(auditFindings(notes).bodyTagNotes, []);
 });
