@@ -74,7 +74,7 @@ function renderFindings(f, a) {
     parts.push('### Inline body tags (not tags in this vault - review)');
     parts.push(`${f.bodyTagNotes.length} note(s) carry ${total} inline \`#tag\`(s) in their text. They are not counted and not rewritten.`);
     const shown = f.bodyTagNotes.slice(0, 50);
-    for (const x of shown) parts.push(`- \`${x.path.split('/').pop()}\`: ${x.tags.map((t) => `\`${t}\``).join(', ')}`);
+    for (const x of shown) parts.push(`- \`${x.path}\`: ${x.tags.map((t) => `\`${t}\``).join(', ')}`);
     if (f.bodyTagNotes.length > shown.length) parts.push(`- … and ${f.bodyTagNotes.length - shown.length} more`);
   }
 

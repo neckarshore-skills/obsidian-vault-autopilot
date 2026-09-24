@@ -770,3 +770,17 @@ test('#106: report mode — a body-only merge target fails the both-exist guard;
   const rewrite = run('rewrite');
   assert.equal(rewrite.status, 0, 'rewrite mode counts the body tag, so the target exists');
 });
+
+test('#106: report mode lists body-tag notes by vault-relative path (same basename, two folders)', () => {
+  const dir = tmpVault({
+    'Tag Manage Config.md': '# Config\n\n```json\n{"bodyTags": "report"}\n```\n',
+    'A/note.md': '---\ntags:\n  - Foo\n---\nsee #alpha\n',
+    'B/note.md': '---\ntags:\n  - Foo\n---\nsee #beta\n',
+  });
+  const cfg = fs.readFileSync(path.join(dir, 'Tag Manage Config.md'), 'utf8');
+  const defaultsPath = path.join(__dirname, '..', 'references', 'tag-overrides.default.json');
+  const out = runAudit(dir, { date: '2026-09-24', defaultsPath, configText: cfg });
+  assert.match(out.report, /- `A\/note\.md`: `alpha`/);
+  assert.match(out.report, /- `B\/note\.md`: `beta`/);
+  assert.doesNotMatch(out.report, new RegExp(dir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), 'no absolute path in the report');
+});

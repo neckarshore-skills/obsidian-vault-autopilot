@@ -197,6 +197,9 @@ function runAudit(dir, { date, fileStamp = '', defaultsPath, configText, reportD
   const notes = excludeReportArtifacts(files.map((p) => ({ path: p, text: fs.readFileSync(p, 'utf8') })), dir, reportDirAbs);
   const inventory = buildInventory(notes, tagOpts);
   const findings = auditFindings(notes, tagOpts);
+  // Body-tag findings render vault-relative with forward slashes: basenames collide across
+  // folders, and a Windows path would not split on '/'.
+  findings.bodyTagNotes = findings.bodyTagNotes.map((x) => ({ ...x, path: path.relative(dir, x.path).split(path.sep).join('/') }));
   const analysis = analyze(notes, inventory, tagOpts);
   const recommendations = buildRecommendations(inventory, dict, notes);
   // NEST (Phase 1): declared-hierarchy promotions, computed from the parsed config.
