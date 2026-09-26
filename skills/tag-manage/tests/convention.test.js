@@ -49,3 +49,40 @@ test('AI-ML resolves via dictionary, not heuristic', () => assert.deepEqual(cano
 test('hierarchical PascalCases each segment', () => assert.deepEqual(canonicalForm('software/devtools', dict), { canonical: 'Software/Devtools', source: 'heuristic' }));
 test('single lowercase word capitalizes', () => assert.deepEqual(canonicalForm('research', dict), { canonical: 'Research', source: 'heuristic' }));
 test('snake_case joins as hyphen-free PascalCase unless AI', () => assert.deepEqual(canonicalForm('ai_agents', dict), { canonical: 'AI-Agents', source: 'heuristic' }));
+
+// ---- #106 item 3: one concept, one canonical in the SHIPPED dictionary ----
+// The default file mapped ai-agents -> AI-Agents AND aiagent -> AIAgent: one vault got two
+// canonicals for one concept. Founder decision 2026-09-25: the shipped canonical is AI-Agents.
+const DEFAULTS_106 = require('../references/tag-overrides.default.json');
+test('#106 item 3: every spelling of the AI-agents concept resolves to AI-Agents (shipped defaults)', () => {
+  const d = mergeOverrides(DEFAULTS_106, {});
+  for (const t of ['AIAgent', 'AIAgents', 'ai-agents', 'ai_agents', 'aiagent', 'AI-Agents']) {
+    assert.equal(canonicalForm(t, d).canonical, 'AI-Agents', `${t} must resolve to AI-Agents`);
+  }
+});
+
+// ---- #106 item 4: dictionary entries apply below a hierarchy prefix ----
+// A vault-local compound ai-agents -> AIAgents renamed AI-Agents but left AI/AI-Agents
+// (33 notes) untouched: the whole-tag lookup never looks at a single segment.
+test('#106 item 4: a dictionary entry applies to a matching segment below a hierarchy prefix', () => {
+  const d = mergeOverrides({ compounds: { 'ai-agents': 'AIAgents' } }, {});
+  assert.deepEqual(canonicalForm('AI/AI-Agents', d), { canonical: 'AI/AIAgents', source: 'compound' });
+});
+test('#106 item 4: under the shipped canonical AI/AI-Agents is already canonical', () => {
+  const d = mergeOverrides(DEFAULTS_106, {});
+  assert.equal(canonicalForm('AI/AI-Agents', d).canonical, 'AI/AI-Agents');
+});
+test('#106 item 4: only the dictionary segment changes; sibling segments stay byte-identical', () => {
+  // `Projects-X` and `devOps` are segments the heuristic WOULD alter (-> ProjectsX, DevOps);
+  // a dictionary hit on another segment must not launder those into a "dictionary" rename.
+  const d = mergeOverrides({ brands: { github: 'GitHub' } }, {});
+  assert.deepEqual(canonicalForm('Projects-X/github/devOps', d), { canonical: 'Projects-X/GitHub/devOps', source: 'brand' });
+});
+test('#106 item 4: a whole-tag dictionary hit still wins over segment lookup', () => {
+  const d = mergeOverrides({ compounds: { 'ai/agents': 'AI/Agents-Whole', agents: 'AgentsSeg' } }, {});
+  assert.equal(canonicalForm('ai/agents', d).canonical, 'AI/Agents-Whole');
+});
+test('#106 item 4: a nested tag with no dictionary segment keeps today\'s heuristic path', () => {
+  const d = mergeOverrides({ brands: { github: 'GitHub' } }, {});
+  assert.equal(canonicalForm('projects/notes', d).source, 'heuristic');
+});

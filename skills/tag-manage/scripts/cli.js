@@ -118,7 +118,9 @@ function applyToVault(dir, ops, opts = {}) {
   const tagOpts = opts.tagOpts || {};
   const transform = opts.transform || ((text) => applyOps(text, ops, tagOpts));
 
-  const notes = excludeReportArtifacts(readNotes(dir), dir, opts.reportDirAbs);
+  // One walk: the notes this run reaches AND the _-folders it does not (#106 item 5).
+  const { files, excluded } = walkWithExclusions(dir);
+  const notes = excludeReportArtifacts(files.map((p) => ({ path: p, text: fs.readFileSync(p, 'utf8') })), dir, opts.reportDirAbs);
 
   // Mass-change guard is PER-OP (the brief: "if an operation would touch more than
   // a threshold of notes"). A single catastrophic op aborts even if the plan total
@@ -144,7 +146,7 @@ function applyToVault(dir, ops, opts = {}) {
     for (const p of planned) if (p.changed) fs.writeFileSync(p.path, p.after, 'utf8');
     wrote = true;
   }
-  return { planned, changedCount, fileCount: planned.length, wrote };
+  return { planned, changedCount, fileCount: planned.length, wrote, excluded };
 }
 
 function planVault(dir, ops, opts = {}) {
@@ -287,6 +289,24 @@ function printPlan(res, header) {
     console.log(`\n--- ${p.path}`);
     if (p.bodyResidual.length) console.log(`  WARN: inline body still contains removed tag(s): ${p.bodyResidual.join(', ')} (frontmatter-only removal)`);
   }
+  printNotReached(res.excluded);
+}
+
+// #106 item 5: a rename/merge stops at the scan boundary. tag-manage never opens a note in a
+// _-folder, so notes there keep the old tags and nothing here can say how many do. Listing
+// the unreached folders (with the walker's existing counts; _secret stays count-suppressed)
+// is the honest answer to "what did this merge leave behind" -- it never reads more.
+function printNotReached(excluded) {
+  const ex = Array.isArray(excluded) ? excluded : [];
+  if (!ex.length) return;
+  const item = (e) => (typeof e.noteCount === 'number'
+    ? `\`${e.folder}\` (${e.noteCount} ${e.noteCount === 1 ? 'note' : 'notes'})`
+    : `\`${e.folder}\``);
+  const open = ex.filter((e) => !e.protected);
+  const prot = ex.filter((e) => e.protected);
+  console.log(`\nNot reached: ${ex.length} _-${ex.length === 1 ? 'folder is' : 'folders are'} outside this run. Notes there keep their tags; they were not checked for the old tags.`);
+  if (open.length) console.log(`  ${open.map(item).join(', ')}`);
+  if (prot.length) console.log(`  protected (never read): ${prot.map((e) => `\`${e.folder}\``).join(', ')}`);
 }
 
 // Filename time-stamp. Explicit --date => '' (deterministic names; the test seam).

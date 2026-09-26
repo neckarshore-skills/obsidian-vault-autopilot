@@ -36,16 +36,37 @@ function pascalHeuristic(tag) {
   return tag.split('/').map((seg) => seg.split(/[-_]/).map(capitalize).join('')).join('/');
 }
 
-function canonicalForm(tag, dict) {
-  const key = logicalKey(tag);
+// Dictionary lookup for ONE key (a whole tag or a single hierarchy segment). One helper for
+// both paths so whole-tag and per-segment resolution can never drift apart. Brand wins over
+// compound; the separator-insensitive fallback lets a no-separator variant (`mercedesbenz`,
+// `MercedesBenz`) resolve to its hyphenated dictionary canonical (`Mercedes-Benz`).
+function dictLookup(key, dict) {
   if (dict.brands.has(key)) return { canonical: dict.brands.get(key), source: 'brand' };
   if (dict.compounds.has(key)) return { canonical: dict.compounds.get(key), source: 'compound' };
-  // Separator-insensitive fallback: a no-separator variant (`mercedesbenz`,
-  // `MercedesBenz`) resolves to its hyphenated dictionary canonical (`Mercedes-Benz`).
-  // Brand wins over compound (mirrors the direct-lookup precedence above).
   const sk = stripSeparators(key);
   if (dict.brandStripped && dict.brandStripped.has(sk)) return { canonical: dict.brandStripped.get(sk), source: 'brand' };
   if (dict.compoundStripped && dict.compoundStripped.has(sk)) return { canonical: dict.compoundStripped.get(sk), source: 'compound' };
+  return null;
+}
+
+function canonicalForm(tag, dict) {
+  const whole = dictLookup(logicalKey(tag), dict);
+  if (whole) return whole;
+  // #106 item 4: a dictionary entry also applies to a matching segment below a hierarchy
+  // prefix (AI/AI-Agents under ai-agents -> AIAgents). ONLY the segments the dictionary
+  // vouches for change; every other segment stays byte-identical. Running the heuristic over
+  // the siblings would turn an unvouched rewrite into a "dictionary" rename, which skips the
+  // compliant-spelling guard in recommend.js (#106 item 1's defect by another route).
+  if (String(tag).includes('/')) {
+    let hit = null;
+    const segs = String(tag).split('/').map((seg) => {
+      const r = seg ? dictLookup(logicalKey(seg), dict) : null;
+      if (!r) return seg;
+      if (!hit || r.source === 'brand') hit = r.source;
+      return r.canonical;
+    });
+    if (hit) return { canonical: segs.join('/'), source: hit };
+  }
   return { canonical: pascalHeuristic(tag), source: 'heuristic' };
 }
 
