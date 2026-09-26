@@ -133,7 +133,7 @@ The config note must contain a `json` fenced code block:
   "reportDir": "Meta/Tag Management",
   "hierarchy": {
     "Investing": ["DayTrading", "SwingTrading", "LongTermInvesting"],
-    "AI": ["AIAgent", "GenerativeAI", "PromptInjection"]
+    "AI": ["AI-Agents", "GenerativeAI", "PromptInjection"]
   }
 }
 ```
@@ -266,7 +266,7 @@ A `#tag`-looking token is left **byte-for-byte untouched** when it sits inside: 
 
 Files and folders starting with `_` or `.` are excluded from walks (`_trash/`, `_secret/`, `.obsidian/`, `_vault-autopilot.md`). `node_modules` is also excluded.
 
-This exclusion is **not silent**: the audit report **and** the `tag-organize` proposal both carry a **Scan Coverage** section naming every `_`-prefixed folder that held markdown but was skipped, with its note count — so a finding of `0` is never read as "the whole vault is clean" when real content lives in `_Work/`, `_Personal/`, etc. Protected meta-folders (`_trash/`, `_secret/`, `_vault-autopilot/`) are listed quietly as expected skips, and `_secret/`'s note count is suppressed (privacy). Bringing an excluded folder into scope is a deliberate user action (move it out from under its `_` prefix); a configurable include is a planned follow-up, kept out of the default so deleted notes and secrets are never scanned by accident.
+This exclusion is **not silent**: the audit report **and** the `tag-organize` proposal both carry a **Scan Coverage** section naming every `_`-prefixed folder that held markdown but was skipped, with its note count — so a finding of `0` is never read as "the whole vault is clean" when real content lives in `_Work/`, `_Personal/`, etc. Protected meta-folders (`_trash/`, `_secret/`, `_vault-autopilot/`) are listed quietly as expected skips, and `_secret/`'s note count is suppressed (privacy). Bringing an excluded folder into scope is a deliberate user action (move it out from under its `_` prefix); a configurable include is a planned follow-up, kept out of the default so deleted notes and secrets are never scanned by accident. The same boundary applies to `plan` and `apply`: a rename or merge never reaches a `_`-folder, so the output ends with a **Not reached** block naming those folders. Notes there keep the old tags, and tag-manage does not check how many carry them — say so to the user rather than presenting the merge as complete.
 
 Production-vault runs follow the repo's **Production Vault Safety Rules** (gate before switching vaults; confirm before touching more than 10 files; read-only operations also require explicit approval for production vaults).
 

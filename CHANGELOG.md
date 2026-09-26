@@ -10,6 +10,15 @@ For implementation detail and internal release notes, see [`logs/changelog.md`](
 
 ## [Unreleased]
 
+### Changed
+
+- **`tag-manage`: one canonical for AI agents** (#106). The shipped dictionary mapped `ai-agents` to `AI-Agents` but `aiagent` to `AIAgent`, so one vault could end up with two canonicals for one concept. Every spelling now resolves to `AI-Agents`. If you adopted `AIAgent` after v0.5.0, the next audit recommends renaming it to `AI-Agents`; to keep `AIAgent`, add `"aiagent": "AIAgent"` under `compounds` in your config.
+
+### Fixed
+
+- **`tag-manage`: dictionary entries now apply below a hierarchy prefix** (#106). A dictionary entry for `ai-agents` renamed `AI-Agents` but left `AI/AI-Agents` untouched. Each segment of a nested tag is now looked up too; only the segments the dictionary knows change, every other segment stays exactly as written. Nested tags with a brand segment (`Projects/github`) are included, so the number of recommendations can go up after this update.
+- **`tag-manage`: `plan` and `apply` say what a merge did not reach** (#106). tag-manage never reads notes in `_`-prefixed folders, so a merge leaves the old tag there. The output now ends with a **Not reached** block listing those folders and their note counts, instead of implying the merge was complete. It reports the counts the scan already has; it does not read those notes.
+
 ## [0.5.0] — 2026-09-24
 
 ### Added

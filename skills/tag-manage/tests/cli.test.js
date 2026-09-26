@@ -784,3 +784,43 @@ test('#106: report mode lists body-tag notes by vault-relative path (same basena
   assert.match(out.report, /- `B\/note\.md`: `beta`/);
   assert.doesNotMatch(out.report, new RegExp(dir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), 'no absolute path in the report');
 });
+
+// ---- #106 item 5: a merge leaves residue in _-folders, and the output must say so ----
+// tag-manage never reads a _-folder note. A merge therefore stops at the scan boundary;
+// the plan/apply output lists what it could not reach instead of implying completeness.
+// It reports the walker's existing counts only -- it never opens a note in a _-folder.
+test('#106 item 5: applyToVault returns the _-folders the run did not reach', () => {
+  const dir = tmpVault({
+    'a.md': '---\ntags:\n  - KI\n---\nx\n',
+    '_Work/w.md': '---\ntags:\n  - KI\n---\nx\n',
+    '_trash/t.md': 'deleted\n',
+  });
+  const res = applyToVault(dir, [{ type: 'rename', from: 'ki', to: 'AI' }], { write: false });
+  assert.deepEqual(res.excluded.map((e) => e.folder).sort(), ['_Work', '_trash']);
+});
+test('#106 item 5: plan output names the unreached folders and does not claim they were checked', () => {
+  const dir = tmpVault({
+    'a.md': '---\ntags:\n  - KI\n---\nx\n',
+    '_Work/w1.md': '---\ntags:\n  - KI\n---\nx\n',
+    '_Work/w2.md': '---\ntags:\n  - KI\n---\nx\n',
+    '_secret/s.md': '---\ntags:\n  - KI\n---\nx\n',
+  });
+  const ops = path.join(dir, '..', `ops-${path.basename(dir)}.json`);
+  fs.writeFileSync(ops, JSON.stringify([{ type: 'rename', from: 'ki', to: 'AI' }]));
+  const cli = path.join(__dirname, '..', 'scripts', 'cli.js');
+  const r = spawnSync('node', [cli, 'plan', dir, '--ops', ops], { encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /Not reached/);
+  assert.match(r.stdout, /`_Work` \(2 notes\)/);
+  assert.match(r.stdout, /not checked for the old tags/);
+  assert.doesNotMatch(r.stdout, /_secret` \(/, '_secret keeps its suppressed count');
+});
+test('#106 item 5: a vault with no _-folders prints no Not-reached line', () => {
+  const dir = tmpVault({ 'a.md': '---\ntags:\n  - KI\n---\nx\n' });
+  const ops = path.join(dir, '..', `ops-${path.basename(dir)}.json`);
+  fs.writeFileSync(ops, JSON.stringify([{ type: 'rename', from: 'ki', to: 'AI' }]));
+  const cli = path.join(__dirname, '..', 'scripts', 'cli.js');
+  const r = spawnSync('node', [cli, 'plan', dir, '--ops', ops], { encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  assert.doesNotMatch(r.stdout, /Not reached/);
+});
