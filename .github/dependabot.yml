@@ -5,11 +5,17 @@
 #
 # Grouping (auto-merge policy 2026-07-10): minor + patch action bumps collapse into ONE
 # weekly grouped PR (fewer PRs, atomic merges — self-clears via the auto-merge workflow).
-# Majors are deliberately left UNGROUPED so each surfaces as its own PR for human review.
+# Majors are grouped into one PR since 2026-10-23 (#296) and stay manual; codeql-action
+# keeps its own majors.
 version: 2
 updates:
   - package-ecosystem: "github-actions"
     directory: "/"
+    # 3-day cooldown (Founder 2026-10-23, dev-environment #296): a release is only
+    # proposed once it has been public for 3 days, so a pulled or compromised release
+    # has time to be noticed before it is auto-merged. Security updates are not delayed.
+    cooldown:
+      default-days: 3
     schedule:
       interval: "weekly"
     groups:
@@ -36,3 +42,11 @@ updates:
         update-types:
           - "minor"
           - "patch"
+      # Majors, grouped (MASCHIN architect 2026-10-23, #296): one PR for this
+      # ecosystem's majors instead of one each. Still manual, never auto-merged: the safe
+      # class excludes semver-major. LAST so the named groups above keep their own majors.
+      github-actions-major:
+        patterns:
+          - "*"
+        update-types:
+          - "major"
