@@ -19,7 +19,7 @@ in full before processing sensitive content.
 
 ## What This Does
 
-**Eleven skills** manage your vault automatically — four launch-scope skills validated to Gold-Run coverage, plus seven more shipped in beta and usable today.
+**Eleven skills** manage your vault automatically: four launch-scope skills validated to Gold-Run coverage (three stable, `property-describe` still beta), plus seven more shipped in beta and usable today.
 
 > **New in v0.5.0:** `tag-manage` keeps the brand spellings your vault already uses (`iOS`, `VibeCoding`) and asks instead of guessing when two spellings disagree, and a frontmatter-only mode (`"bodyTags": "report"`) leaves `#tags` in note text untouched. `skill-library-sync` no longer retires skills it never looked for, sees symlinked skills, and keeps your own frontmatter.
 
